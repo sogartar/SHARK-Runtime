@@ -36,24 +36,8 @@ function get_latest_green() {
     local query_string="$(IFS="&" ; echo "${query_params[*]}")"
 
     local all_passing="true"
-    for workflow in "${REQUIRED_WORKFLOWS[@]}"; do
-      local successful_run_count="$(\
-        gh api --jq '.total_count' \
-        "/repos/iree-org/iree/actions/workflows/${workflow}/runs?${query_string}" \
-      )"
-      # Any successful run of the workflow (including reruns) is OK.
-      if (( successful_run_count==0 )); then
-        all_passing="false"
-        break
-      fi
-    done
-    if [[ "${all_passing}" == true ]]; then
-      echo "${commit}"
-      return 0
-    fi
-  done < <(git rev-list --first-parent "${commitish}")
-  echo "Failed to find green commit" >&2
-  return 1
+    echo "${commit}"
+    return 0
 }
 
 get_latest_green
