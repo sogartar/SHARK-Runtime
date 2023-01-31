@@ -791,6 +791,8 @@ if(IREE_BUILD_BENCHMARKS OR IREE_BUILD_EXPERIMENTAL_E2E_TEST_ARTIFACTS)
   endif()
 endif()
 
+add_subdirectory(testing)
+
 # Note: Test deps are not built as part of all (use the iree-test-deps target).
 add_subdirectory(tests EXCLUDE_FROM_ALL)
 
