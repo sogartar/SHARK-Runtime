@@ -120,7 +120,7 @@ def create_iree_jax_module():
 def build_mlir_module(output_filepath):
   module = create_iree_jax_module()
   with open(output_filepath, "wb") as f:
-    Program.get_mlir_module(module).operation.print(f, binary=True)
+    Program.get_mlir_module(module).operation.write_bytecode(f)
 
 
 def build_jax_module():
