@@ -11,7 +11,8 @@ import sys
 import tempfile
 import numpy as np
 import unittest
-from iree.testing import assert_array_list_almost_equal, assert_array_almost_equal, parse_args
+import argparse
+from typing import Any, Callable, List
 
 args = None
 
@@ -42,6 +43,54 @@ def load_data():
       np.load(os.path.join(
           data_dir, "expected_prediction_after_train_step.npz")).values())[0]
   return batch, expected_optimizer_state_after_init, expected_optimizer_state_after_train_step, expected_prediction_after_train_step
+
+
+def parse_args(args: List[str] = sys.argv[1:]):
+  parser = argparse.ArgumentParser()
+  parser.add_argument("--target_backend", type=str, default="llvm-cpu")
+  parser.add_argument("--driver", type=str, default="local-task")
+  return parser.parse_known_args(args=args)
+
+
+DEFAULT_DECIMAL = 5
+DEFAULT_EPSILON = 10**-7
+DEFAULT_NULP = 10**8
+
+
+def assert_array_almost_equal(a,
+                              b,
+                              decimal=DEFAULT_DECIMAL,
+                              epsilon=DEFAULT_EPSILON,
+                              nulp=DEFAULT_NULP):
+  np_a = np.asarray(a)
+  np_b = np.asarray(b)
+  # Test for absolute error.
+  np.testing.assert_array_almost_equal(np_a, np_b, decimal=decimal)
+  # Test for relative error while ignoring false errors from
+  # catastrophic cancellation.
+  np.testing.assert_array_almost_equal_nulp(np.abs(np_a - np_b) + epsilon,
+                                            np.zeros_like(np_a),
+                                            nulp=nulp)
+
+
+def assert_array_list_equal(
+    a,
+    b,
+    array_compare_fn: Callable[[Any, Any],
+                               None] = np.testing.assert_array_equal):
+  assert (len(a) == len(b))
+  for x, y in zip(a, b):
+    array_compare_fn(x, y)
+
+
+def assert_array_list_almost_equal(a,
+                                   b,
+                                   decimal=DEFAULT_DECIMAL,
+                                   epsilon=DEFAULT_EPSILON,
+                                   nulp=DEFAULT_NULP):
+  assert_array_list_equal(
+      a, b,
+      lambda x, y: assert_array_almost_equal(x, y, decimal, epsilon, nulp))
 
 
 class MnistTrainTest(unittest.TestCase):
