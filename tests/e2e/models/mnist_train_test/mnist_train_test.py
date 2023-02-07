@@ -45,11 +45,11 @@ def load_data():
   return batch, expected_optimizer_state_after_init, expected_optimizer_state_after_train_step, expected_prediction_after_train_step
 
 
-def parse_args(args: List[str] = sys.argv[1:]):
+def parse_args():
   parser = argparse.ArgumentParser()
   parser.add_argument("--target_backend", type=str, default="llvm-cpu")
   parser.add_argument("--driver", type=str, default="local-task")
-  return parser.parse_known_args(args=args)
+  return parser.parse_known_args()
 
 
 DEFAULT_DECIMAL = 5

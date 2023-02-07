@@ -192,7 +192,7 @@ def generate_test_data(output_mlir_filepath: str, batch_filepath: str,
                       *tree_flatten(jax_module.get_opt_state())[0])
 
 
-def parse_args(argv):
+def parse_args():
   parser = argparse.ArgumentParser()
   parser.add_argument("--output_mlir_filepath",
                       help="Output to the compiled IREE Jax MLIR model.",
@@ -208,13 +208,13 @@ def parse_args(argv):
   parser.add_argument("--expected_prediction_after_train_step_filepath",
                       type=str,
                       default="expected_prediction_after_train_step.npz")
-  return parser.parse_args(argv[1:])
+  return parser.parse_args()
 
 
-def generate_test_data_cli(argv):
-  kwargs = vars(parse_args(argv))
+def generate_test_data_cli():
+  kwargs = vars(parse_args())
   generate_test_data(**kwargs)
 
 
 if __name__ == "__main__":
-  generate_test_data_cli(sys.argv)
+  generate_test_data_cli()
