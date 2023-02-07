@@ -12,8 +12,9 @@ import tempfile
 import numpy as np
 import unittest
 import argparse
-from typing import Any, Callable, List
+from typing import Any, Callable, List, TypeVar
 
+Tensor = TypeVar('Tensor')
 args = None
 
 
@@ -52,45 +53,28 @@ def parse_args():
   return parser.parse_known_args()
 
 
-DEFAULT_DECIMAL = 5
-DEFAULT_EPSILON = 10**-7
-DEFAULT_NULP = 10**8
+DEFAULT_REL_TOLERANCE = 1e-5
+DEFAULT_ABS_TOLERANCE = 1e-5
 
 
-def assert_array_almost_equal(a,
-                              b,
-                              decimal=DEFAULT_DECIMAL,
-                              epsilon=DEFAULT_EPSILON,
-                              nulp=DEFAULT_NULP):
-  np_a = np.asarray(a)
-  np_b = np.asarray(b)
-  # Test for absolute error.
-  np.testing.assert_array_almost_equal(np_a, np_b, decimal=decimal)
-  # Test for relative error while ignoring false errors from
-  # catastrophic cancellation.
-  np.testing.assert_array_almost_equal_nulp(np.abs(np_a - np_b) + epsilon,
-                                            np.zeros_like(np_a),
-                                            nulp=nulp)
+def allclose(a: Tensor,
+             b: Tensor,
+             rtol=DEFAULT_REL_TOLERANCE,
+             atol=DEFAULT_ABS_TOLERANCE):
+  return np.allclose(np.asarray(a), np.asarray(b), rtol, atol)
 
 
-def assert_array_list_equal(
-    a,
-    b,
-    array_compare_fn: Callable[[Any, Any],
-                               None] = np.testing.assert_array_equal):
+def assert_array_list_compare(array_compare_fn, a: Tensor, b: Tensor):
   assert (len(a) == len(b))
   for x, y in zip(a, b):
-    array_compare_fn(x, y)
+    np.testing.assert_array_compare(array_compare_fn, x, y)
 
 
-def assert_array_list_almost_equal(a,
-                                   b,
-                                   decimal=DEFAULT_DECIMAL,
-                                   epsilon=DEFAULT_EPSILON,
-                                   nulp=DEFAULT_NULP):
-  assert_array_list_equal(
-      a, b,
-      lambda x, y: assert_array_almost_equal(x, y, decimal, epsilon, nulp))
+def assert_array_list_allclose(a: List[Tensor],
+                               b: List[Tensor],
+                               rtol=DEFAULT_REL_TOLERANCE,
+                               atol=DEFAULT_ABS_TOLERANCE):
+  assert_array_list_compare(lambda x, y: allclose(x, y, rtol, atol), a, b)
 
 
 class MnistTrainTest(unittest.TestCase):
@@ -100,14 +84,15 @@ class MnistTrainTest(unittest.TestCase):
     batch, expected_optimizer_state_after_init, expected_optimizer_state_after_train_step, expected_prediction_after_train_step = load_data(
     )
     module.update(*batch)
-    assert_array_list_almost_equal(module.get_opt_state(),
-                                   expected_optimizer_state_after_train_step)
+    assert_array_list_allclose(module.get_opt_state(),
+                               expected_optimizer_state_after_train_step)
     prediction = module.forward(batch[0])
-    assert_array_almost_equal(prediction, expected_prediction_after_train_step)
+    np.testing.assert_allclose(prediction, expected_prediction_after_train_step,
+                               DEFAULT_REL_TOLERANCE, DEFAULT_ABS_TOLERANCE)
     rng_state = np.array([0, 6789], dtype=np.int32)
     module.initialize(rng_state)
-    assert_array_list_almost_equal(module.get_opt_state(),
-                                   expected_optimizer_state_after_init)
+    assert_array_list_allclose(module.get_opt_state(),
+                               expected_optimizer_state_after_init)
 
 
 if __name__ == '__main__':
