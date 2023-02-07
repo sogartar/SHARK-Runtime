@@ -14,7 +14,7 @@
 
 import jax
 import numpy.random as npr
-from examples import datasets
+import datasets
 import jax.core
 import jax.numpy as jnp
 from jax import grad, random
@@ -27,7 +27,6 @@ from iree.jax import (
     Program,
 )
 import numpy as np
-import sys
 import argparse
 
 
@@ -197,7 +196,7 @@ def parse_args():
   parser.add_argument("--output_mlir_filepath",
                       help="Output to the compiled IREE Jax MLIR model.",
                       type=str,
-                      default="mnist_train.mlir")
+                      default="mnist_train.mlirbc")
   parser.add_argument("--batch_filepath", type=str, default="batch.npz")
   parser.add_argument("--expected_optimizer_state_after_init_filepath",
                       type=str,

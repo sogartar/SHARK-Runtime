@@ -12,7 +12,7 @@ import tempfile
 import numpy as np
 import unittest
 import argparse
-from typing import Any, Callable, List, TypeVar
+from typing import List, TypeVar
 from urllib.request import urlretrieve
 import tarfile
 
