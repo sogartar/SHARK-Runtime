@@ -96,12 +96,6 @@ def assert_array_list_almost_equal(a,
 class MnistTrainTest(unittest.TestCase):
 
   def test_mnist_training(self):
-    """Test that IREE has the correct model and optimizer state
-    after doing one train step and after initialization of parameters.
-    The ground truth is extracted from a Jax model.
-    The MLIR model is generated with IREE Jax.
-    To generate the model together with the test data use generate_test_data.py.
-    """
     module = build_module()
     batch, expected_optimizer_state_after_init, expected_optimizer_state_after_train_step, expected_prediction_after_train_step = load_data(
     )
