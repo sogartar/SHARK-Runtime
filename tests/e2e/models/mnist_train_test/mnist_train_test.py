@@ -13,24 +13,24 @@ import numpy as np
 import unittest
 import argparse
 from typing import Any, Callable, List, TypeVar
+from urllib.request import urlretrieve
+import tarfile
 
 Tensor = TypeVar('Tensor')
 args = None
 
 
-def build_module():
-  with tempfile.TemporaryDirectory() as tmp_dir:
-    vmfb_file = os.path.join(tmp_dir, "mnist_train.vmfb")
-    compile_file(input_file=os.path.join(os.path.dirname(__file__),
-                                         "mnist_train.mlir"),
-                 output_file=vmfb_file,
-                 target_backends=[args.target_backend],
-                 input_type=InputType.MHLO)
-    return load_vm_flatbuffer_file(vmfb_file, driver=args.driver)
+def build_module(artifacts_dir: str):
+  vmfb_file = os.path.join(artifacts_dir, "mnist_train.vmfb")
+  compile_file(input_file=os.path.join(
+      artifacts_dir, "tests/e2e/models/mnist_train_test/mnist_train.mlirbc"),
+               output_file=vmfb_file,
+               target_backends=[args.target_backend],
+               input_type=InputType.MHLO)
+  return load_vm_flatbuffer_file(vmfb_file, driver=args.driver)
 
 
-def load_data():
-  data_dir = os.path.dirname(__file__)
+def load_data(data_dir: str):
   batch = list(np.load(os.path.join(data_dir, "batch.npz")).values())
   expected_optimizer_state_after_init = list(
       np.load(os.path.join(data_dir,
@@ -77,12 +77,32 @@ def assert_array_list_allclose(a: List[Tensor],
   assert_array_list_compare(lambda x, y: allclose(x, y, rtol, atol), a, b)
 
 
+def download_test_data(out_path: str):
+  urlretrieve(
+      "https://storage.googleapis.com/iree-model-artifacts/mnist_train.d13d480df48598695193bd1a20795a0deb57cc659004914a4bd484eab85d524f.tar",
+      out_path)
+
+
+def extract_test_data(archive_path: str, out_dir: str):
+  with tarfile.open(archive_path) as tar:
+    tar.extractall(out_dir)
+
+
 class MnistTrainTest(unittest.TestCase):
 
   def test_mnist_training(self):
-    module = build_module()
-    batch, expected_optimizer_state_after_init, expected_optimizer_state_after_train_step, expected_prediction_after_train_step = load_data(
-    )
+    with tempfile.TemporaryDirectory() as tmp_dir:
+      archive_path = os.path.join(tmp_dir, "mnist_train.tar")
+      download_test_data(archive_path)
+      extract_test_data(archive_path, tmp_dir)
+      module = build_module(tmp_dir)
+      (
+          batch,
+          expected_optimizer_state_after_init,
+          expected_optimizer_state_after_train_step,
+          expected_prediction_after_train_step,
+      ) = load_data(os.path.join(tmp_dir, "tests/e2e/models/mnist_train_test"))
+
     module.update(*batch)
     assert_array_list_allclose(module.get_opt_state(),
                                expected_optimizer_state_after_train_step)
