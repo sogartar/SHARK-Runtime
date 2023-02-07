@@ -10,8 +10,8 @@ iree_py_test(
   SRCS
     "mnist_train_test.py"
   ARGS
-    "--target_backend" "llvm-cpu"
-    "--driver" "local-task"
+    "--target_backend=llvm-cpu"
+    "--driver=local-task"
   LABELS
     "driver=local-task"
 )
@@ -22,8 +22,8 @@ iree_py_test(
   SRCS
     "mnist_train_test.py"
   ARGS
-    "--target_backend" "cuda"
-    "--driver" "cuda"
+    "--target_backend=cuda"
+    "--driver=cuda"
   LABELS
     "requires-gpu-nvidia"
     "driver=cuda"
@@ -35,8 +35,8 @@ iree_py_test(
   SRCS
     "mnist_train_test.py"
   ARGS
-    "--target_backend" "vulkan-spirv"
-    "--driver" "vulkan"
+    "--target_backend=vulkan-spirv"
+    "--driver=vulkan"
   LABELS
     "driver=vulkan"
 )
