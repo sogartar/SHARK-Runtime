@@ -4,20 +4,23 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from iree.runtime import load_vm_flatbuffer_file
-from iree.compiler.tools import compile_file, InputType
+import argparse
 import os
 import sys
+import tarfile
 import tempfile
-import numpy as np
 import unittest
-import argparse
 from typing import List, TypeVar
 from urllib.request import urlretrieve
-import tarfile
+
+import numpy as np
+
+from iree.compiler.tools import InputType, compile_file
+from iree.runtime import load_vm_flatbuffer_file
+
+MODEL_ARTIFACTS_URL = "https://storage.googleapis.com/iree-model-artifacts/mnist_train.a49ba1535a45ac0f3e6be22a7ed5dddf4a53cd1f41126af938f0667b998f8e11.tar"
 
 Tensor = TypeVar('Tensor')
-args = None
 
 
 def build_module(artifacts_dir: str):
@@ -43,7 +46,12 @@ def load_data(data_dir: str):
   expected_prediction_after_train_step = list(
       np.load(os.path.join(
           data_dir, "expected_prediction_after_train_step.npz")).values())[0]
-  return batch, expected_optimizer_state_after_init, expected_optimizer_state_after_train_step, expected_prediction_after_train_step
+  return (
+      batch,
+      expected_optimizer_state_after_init,
+      expected_optimizer_state_after_train_step,
+      expected_prediction_after_train_step,
+  )
 
 
 def parse_args():
@@ -78,9 +86,7 @@ def assert_array_list_allclose(a: List[Tensor],
 
 
 def download_test_data(out_path: str):
-  urlretrieve(
-      "https://storage.googleapis.com/iree-model-artifacts/mnist_train.d13d480df48598695193bd1a20795a0deb57cc659004914a4bd484eab85d524f.tar",
-      out_path)
+  urlretrieve(MODEL_ARTIFACTS_URL, out_path)
 
 
 def extract_test_data(archive_path: str, out_dir: str):
