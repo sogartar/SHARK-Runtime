@@ -49,8 +49,7 @@ struct MarkBisectPass : public impl::MarkBisectBase<MarkBisectPass> {
     }
     Block& entryBlock = funcOp.getBody().front();
     if (entryBlock.getOperations().size() < 3) {
-      // Degenerate case. Needs at least 1 op for each half + the
-      // return op.
+      // Degenerate case. Needs at least 1 op for each half + the return op.
       return;
     }
     size_t opsCount = entryBlock.getOperations().size();

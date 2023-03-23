@@ -1,10 +1,11 @@
 // RUN: split-mlir \
-// RUN:   --split-input-file --pass-pipeline="builtin.module(func.func(iree-mark-bisect{functions=f,g}))" %s \
+// RUN:   --split-input-file \
+// RUN:   --pass-pipeline="builtin.module(func.func(iree-mark-bisect{functions=two_ops,too_few_ops,multiple_ops}))" %s \
 // RUN: | FileCheck %s
 
 // Each operation is marked as separate range.
-// CHECK-LABEL: func.func @f
-func.func @f(%arg0: tensor<2xf32>) -> tensor<2xf32> {
+// CHECK-LABEL: func.func @two_ops
+func.func @two_ops(%arg0: tensor<2xf32>) -> tensor<2xf32> {
 //       CHECK: mhlo.constant
 //   CHECK-DAG: outline_range_first
 //   CHECK-DAG: outline_range_last
@@ -19,8 +20,8 @@ func.func @f(%arg0: tensor<2xf32>) -> tensor<2xf32> {
 // -----
 
 // Degenerate case with too few ops should not mark enything.
-// CHECK-LABEL: func.func @f
-func.func @f(%arg0: tensor<2xf32>) -> tensor<2xf32> {
+// CHECK-LABEL: func.func @too_few_ops
+func.func @too_few_ops(%arg0: tensor<2xf32>) -> tensor<2xf32> {
 //      CHECK: mhlo.constant
 //  CHECK-NOT: outline_range_first
 //  CHECK-NOT: outline_range_last
@@ -34,8 +35,8 @@ func.func @f(%arg0: tensor<2xf32>) -> tensor<2xf32> {
 // -----
 
 // Multiple ops per range.
-// CHECK-LABEL: func.func @g
-func.func @g(%arg0: tensor<2xf32>) -> tensor<2xf32> {
+// CHECK-LABEL: func.func @multiple_ops
+func.func @multiple_ops(%arg0: tensor<2xf32>) -> tensor<2xf32> {
 //       CHECK: outline_range_first
 //  CHECK-SAME: dense<1.000000e+00>
   %cts1 = mhlo.constant dense<1.000000e+00> : tensor<2xf32>
