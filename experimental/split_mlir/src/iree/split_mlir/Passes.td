@@ -11,14 +11,14 @@ include "mlir/Pass/PassBase.td"
 
 def OutlineFunctions :
     Pass<"iree-outline-functions", "mlir::ModuleOp"> {
-  let summary = "Outline opeartions in separate function(s).";
+  let summary = "Outline operations in separate function(s).";
   let constructor = "mlir::iree::split_mlir::createOutlineFunctionsPass()";
   let dependentDialects = ["mlir::func::FuncDialect"];
 }
 
 def MarkBisect : Pass<"iree-mark-bisect", "mlir::func::FuncOp"> {
   let summary = "Mark operations in function(s) for outlining with bisect strategy.";
-  let description = "Each function is bisected with each piece having balanced number of ops.";
+  let description = "Each function's entry block is bisected, such that each piece has balanced number of ops.";
   let constructor = "mlir::iree::split_mlir::createMarkBisectPass()";
   let options = [
     ListOption<"functions", "functions", "std::string", "List of functions to bisect.">
