@@ -47,6 +47,9 @@ struct MarkBisectPass : public impl::MarkBisectBase<MarkBisectPass> {
     if (!functionsSet.contains(funcOp.getSymName())) {
       return;
     }
+    if (funcOp.getBody().getBlocks().size() > 1) {
+      return signalPassFailure();
+    }
     Block& entryBlock = funcOp.getBody().front();
     if (entryBlock.getOperations().size() < 3) {
       // Degenerate case. Needs at least 1 op for each half + the return op.
