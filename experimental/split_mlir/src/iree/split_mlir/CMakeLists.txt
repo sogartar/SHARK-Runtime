@@ -31,23 +31,22 @@ iree_cc_library(
   PUBLIC
 )
 
-iree_cc_binary(
+iree_cc_library(
   NAME
-    split-mlir
+    registration
   SRCS
-    "split_mlir_main.cc"
+    "PluginRegistration.cpp"
   DEPS
     ::split_mlir_lib
-    LLVMSupport
     MLIRIR
-    MLIROptLib
-    MLIRSupport
-    iree::compiler::Tools::init_passes_and_dialects
-    iree::compiler::Tools::init_targets
-    iree::compiler::bindings::c::headers
-    iree::compiler::API::Impl
-  DATA
-    ${IREE_LLD_TARGET}
-  HOSTONLY
-  SETUP_INSTALL_RPATH
+    MLIRPass
+    iree::compiler::PluginAPI
+  PUBLIC
+)
+
+iree_compiler_register_plugin(
+  PLUGIN_ID
+    split_mlir
+  TARGET
+    ::registration
 )

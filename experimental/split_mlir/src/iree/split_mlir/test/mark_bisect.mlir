@@ -1,5 +1,6 @@
-// RUN: split-mlir \
+// RUN: iree-opt \
 // RUN:   --split-input-file \
+// RUN:   --iree-plugin=split_mlir \
 // RUN:   --pass-pipeline="builtin.module(func.func(iree-mark-bisect{functions=two_ops,too_few_ops,multiple_ops}))" %s \
 // RUN: | FileCheck %s
 

@@ -13,7 +13,7 @@ iree_lit_test_suite(
     "mark_bisect.mlir"
   TOOLS
     FileCheck
-    iree::experimental::split_mlir::src::iree::split_mlir::split-mlir
+    iree-opt
 )
 
 iree_lit_test_suite(
@@ -23,5 +23,5 @@ iree_lit_test_suite(
     "function_outlining.mlir"
   TOOLS
     FileCheck
-    iree::experimental::split_mlir::src::iree::split_mlir::split-mlir
+    iree-opt
 )

@@ -237,12 +237,12 @@ LogicalResult outlineOpRanges(func::FuncOp funcOp, ModuleOp moduleOp,
                               OpBuilder& builder) {
   Region& funcBody = funcOp.getFunctionBody();
   SmallVector<iterator_range<Block::iterator>, 4> outlineRanges;
-  for (auto& blockIt : llvm::enumerate(funcBody.getBlocks())) {
+  for (auto blockIt : llvm::enumerate(funcBody.getBlocks())) {
     outlineRanges.clear();
     if (failed(getOutlineOpRanges(blockIt.value(), outlineRanges))) {
       return LogicalResult::failure();
     }
-    for (auto& rangeIt : llvm::enumerate(outlineRanges)) {
+    for (auto rangeIt : llvm::enumerate(outlineRanges)) {
       removeOutlineMarkers(rangeIt.value());
       std::string name = getOutlinedFuncName(funcOp.getSymName(),
                                              blockIt.index(), rangeIt.index());

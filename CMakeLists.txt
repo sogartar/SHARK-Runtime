@@ -152,7 +152,6 @@ endif()
 
 option(IREE_BUILD_EXPERIMENTAL_VMVX_MMT4D "Enables MMT4D methods in the VMVX module." OFF)
 option(IREE_BUILD_EXPERIMENTAL_WEB_SAMPLES "Builds experimental web samples." OFF)
-option(IREE_BUILD_EXPERIMENTAL_SPLIT_MLIR "" OFF)
 
 #-------------------------------------------------------------------------------
 # CUDA Toolkit.
@@ -920,10 +919,6 @@ endif()
 
 if(IREE_BUILD_EXPERIMENTAL_WEB_SAMPLES)
   add_subdirectory(experimental/web)
-endif()
-
-if(IREE_BUILD_EXPERIMENTAL_SPLIT_MLIR)
-  add_subdirectory(experimental/split_mlir)
 endif()
 
 set(IREE_PUBLIC_INCLUDE_DIRS "${IREE_COMMON_INCLUDE_DIRS}"
