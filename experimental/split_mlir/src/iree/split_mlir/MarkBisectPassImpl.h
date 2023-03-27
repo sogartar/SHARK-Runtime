@@ -67,6 +67,7 @@ struct MarkBisectPass : public impl::MarkBisectBase<MarkBisectPass> {
     std::advance(secondHalfFirstOp, 1);
     markRangeFirst(*secondHalfFirstOp, builder);
     auto secondHalfLastOp = entryBlock.end();
+    // Take operation that is just before the return operation.
     std::advance(secondHalfLastOp, -2);
     markRangeLast(*secondHalfLastOp, builder);
   }

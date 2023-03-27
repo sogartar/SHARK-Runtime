@@ -33,6 +33,14 @@ namespace split_mlir {
 
 namespace {
 
+// Collect all operation ranges that are marked for outlining.
+// The begining of a range is marked with the outline_range_first attribute.
+// The last operation of a range is marked with the outline_range_last attribue.
+// Example:
+// %0 = arith.addi %arg0, %arg1 {outline_range_first} : i32
+// %1 = arith.addi %arg2, %arg3 : i32
+// %2 = arith.muli %arg3, %arg4 {outline_range_last} : i32
+// The outline range will consist of the 3 operations.
 LogicalResult getOutlineOpRanges(
     Block& block, SmallVector<iterator_range<Block::iterator>, 4>& res) {
   bool isInOutliningRange = false;
@@ -157,6 +165,10 @@ void substititeUses(OriginalOpResultsIt originalBegin,
   }
 }
 
+// All operations in the range `opRange` are moved into a new function with name
+// `name`. The resulting function is put inside `moduleOp` and is properly
+// isolated from above. This does not insert a call to the new function in place
+// of the moved operations.
 func::FuncOp createFunctionFromOps(iterator_range<Block::iterator> opRange,
                                    StringRef name, ModuleOp moduleOp,
                                    SmallVector<Value, 64>& rangeOperands,
@@ -233,6 +245,8 @@ void removeOutlineMarkers(iterator_range<Block::iterator> opRange) {
   std::prev(opRange.end())->removeAttr("outline_range_last");
 }
 
+// Each marked operation range in `funcOp` is outlined into a new function.
+// A call to the new function is inserted in place of the outlined operations.
 LogicalResult outlineOpRanges(func::FuncOp funcOp, ModuleOp moduleOp,
                               OpBuilder& builder) {
   Region& funcBody = funcOp.getFunctionBody();
