@@ -126,6 +126,7 @@ iree_py_library(
     "iree/runtime/distributed/__init__.py"
     "iree/runtime/distributed/distributed.py"
     "iree/runtime/distributed/run_rank.py"
+    "iree/runtime/distributed/sharding_pass_validation.py"
     "iree/runtime/distributed/utils.py"
     "iree/runtime/scripts/iree_benchmark_trace/__main__.py"
     "iree/runtime/scripts/iree_benchmark_module/__main__.py"
