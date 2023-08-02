@@ -24,6 +24,12 @@ def parse_args():
         "--function", type=str, required=True, help="Name of function to call."
     )
     parser.add_argument(
+        "--call_count",
+        type=int,
+        default=1,
+        help="How many times to call the function during time measurement.",
+    )
+    parser.add_argument(
         "--measure_execution_time",
         action="store_true",
         default=False,
@@ -56,6 +62,7 @@ def run_module(
     device: iree.runtime.HalDevice,
     module_filepath: str,
     function: str,
+    call_count: int,
     input_filepath: str,
     output_filepath: str,
     measure_execution_time: bool,
@@ -76,7 +83,9 @@ def run_module(
         # Sync all ranks
         MPI.COMM_WORLD.barrier()
         start_time = datetime.datetime.now()
-    results = getattr(bound_module, function)(*input_args_on_device)
+    assert call_count > 0
+    for _ in range(call_count):
+        results = getattr(bound_module, function)(*input_args_on_device)
     if measure_execution_time:
         end_time = datetime.datetime.now()
     if isinstance(results, DeviceArray):
@@ -84,7 +93,9 @@ def run_module(
     if measure_execution_time:
         if isinstance(results, tuple):
             results = list(results)
-        results.append(np.array((end_time - start_time).total_seconds(), dtype=float))
+        results.append(
+            np.array((end_time - start_time).total_seconds() / call_count, dtype=float)
+        )
     utils.write_numpy_arrays_to_file(filepath=output_filepath, arrays=results)
 
 
@@ -94,6 +105,7 @@ def run_rank(
     function: str,
     inputs: str,
     outputs: str,
+    call_count: int,
     measure_execution_time: bool,
     warmup: int,
 ):
@@ -107,6 +119,7 @@ def run_rank(
         device=device,
         module_filepath=module_filepath,
         function=function,
+        call_count=call_count,
         input_filepath=inputs[rank],
         output_filepath=outputs[rank],
         measure_execution_time=measure_execution_time,

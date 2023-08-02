@@ -37,6 +37,7 @@ def run_ranks(
     function: str,
     inputs: List[List[ArrayLike]],
     driver: str,
+    call_count: int = 1,
     measure_execution_time: bool = False,
     warmup: int = 0,
 ) -> List[List[ArrayLike]]:
@@ -69,9 +70,10 @@ def run_ranks(
                 f"--driver={driver}",
                 f"--module_filepath={module_filepath}",
                 f"--function={function}",
-            ] +
-            (["--measure_execution_time"] if measure_execution_time else []) +
-            [
+                f"--call_count={call_count}",
+            ]
+            + (["--measure_execution_time"] if measure_execution_time else [])
+            + [
                 f"--warmup={warmup}",
                 "--inputs",
             ]
