@@ -37,7 +37,9 @@ def run_ranks(
     function: str,
     inputs: List[List[ArrayLike]],
     driver: str,
-) -> List[List[DeviceArray]]:
+    measure_execution_time: bool = False,
+    warmup: int = 0,
+) -> List[List[ArrayLike]]:
     """
     Start all ranks with mpirun.
     On all ranks run the function |function| from the given module.
@@ -67,6 +69,10 @@ def run_ranks(
                 f"--driver={driver}",
                 f"--module_filepath={module_filepath}",
                 f"--function={function}",
+            ] +
+            (["--measure_execution_time"] if measure_execution_time else []) +
+            [
+                f"--warmup={warmup}",
                 "--inputs",
             ]
             + input_filepaths

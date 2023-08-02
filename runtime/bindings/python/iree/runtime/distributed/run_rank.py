@@ -10,6 +10,8 @@ import iree.runtime
 from iree.runtime.array_interop import DeviceArray
 from mpi4py import MPI
 import utils
+import datetime
+import numpy as np
 
 
 def parse_args():
@@ -20,6 +22,18 @@ def parse_args():
     )
     parser.add_argument(
         "--function", type=str, required=True, help="Name of function to call."
+    )
+    parser.add_argument(
+        "--measure_execution_time",
+        action="store_true",
+        default=False,
+        help="Measure execution time in seconds f64 and append to results.",
+    )
+    parser.add_argument(
+        "--warmup",
+        type=int,
+        default=0,
+        help="How many warmup calls to do before the actual call that generates the result.",
     )
     parser.add_argument(
         "--inputs",
@@ -44,16 +58,33 @@ def run_module(
     function: str,
     input_filepath: str,
     output_filepath: str,
-) -> DeviceArray:
+    measure_execution_time: bool,
+    warmup: int,
+):
     config = iree.runtime.Config(device=device)
     with open(module_filepath, "rb") as f:
         vm_flatbuffer = f.read()
     vm_module = iree.runtime.VmModule.from_flatbuffer(config.vm_instance, vm_flatbuffer)
     bound_module = iree.runtime.load_vm_module(vm_module, config)
     input_args = utils.read_numpy_arrays_from_file(input_filepath)
-    results = getattr(bound_module, function)(*input_args)
+    input_args_on_device = [
+        iree.runtime.asdevicearray(device, arr) for arr in input_args
+    ]
+    for _ in range(warmup):
+        getattr(bound_module, function)(*input_args_on_device)
+    if measure_execution_time:
+        # Sync all ranks
+        MPI.COMM_WORLD.barrier()
+        start_time = datetime.datetime.now()
+    results = getattr(bound_module, function)(*input_args_on_device)
+    if measure_execution_time:
+        end_time = datetime.datetime.now()
     if isinstance(results, DeviceArray):
         results = [results]
+    if measure_execution_time:
+        if isinstance(results, tuple):
+            results = list(results)
+        results.append(np.array((end_time - start_time).total_seconds(), dtype=float))
     utils.write_numpy_arrays_to_file(filepath=output_filepath, arrays=results)
 
 
@@ -63,6 +94,8 @@ def run_rank(
     function: str,
     inputs: str,
     outputs: str,
+    measure_execution_time: bool,
+    warmup: int,
 ):
     rank = MPI.COMM_WORLD.Get_rank()
     hal_driver = iree.runtime.get_driver(driver)
@@ -76,6 +109,8 @@ def run_rank(
         function=function,
         input_filepath=inputs[rank],
         output_filepath=outputs[rank],
+        measure_execution_time=measure_execution_time,
+        warmup=warmup,
     )
 
 

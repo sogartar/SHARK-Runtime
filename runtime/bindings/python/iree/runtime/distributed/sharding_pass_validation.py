@@ -6,12 +6,13 @@ import subprocess
 from pathlib import Path
 from jax._src.lib import xla_client
 from jaxlib.xla_client import HloSharding
-from typing import List
+from typing import List, Tuple, Union
 from numpy.typing import ArrayLike
 import jax
 from jax._src.sharding_impls import GSPMDSharding
 import jax._src.interpreters.pxla as pxla
 import numpy as np
+from datetime import timedelta
 
 xla_extension = xla_client._xla
 
@@ -70,12 +71,23 @@ def assemble_shards(shards: List[ArrayLike], sharding: HloSharding) -> ArrayLike
 
 
 def propagate_shardings_and_spmd_partition(
-    mlir_filepath: str, output_filepath: str, num_devices: int, use_cache: bool
+    mlir_filepath: str,
+    output_filepath: str,
+    num_devices: int,
+    use_cache: bool,
+    allow_spmd_sharding_propagation_to_output: int = 1,
 ):
     res = subprocess.run(
         [
             "stablehlo-opt",
-            f"--pass-pipeline=builtin.module(stablehlo-xla-sharding-propagation-and-spmd-partitioner{{is_spmd=1 allow_spmd_sharding_propagation_to_output=1 allow_spmd_sharding_propagation_to_parameters=1 num_partitions={num_devices} num_replicas=1}})",
+            (
+                "--pass-pipeline=builtin.module(stablehlo-xla-sharding-propagation-and-spmd-partitioner{"
+                "is_spmd=1 "
+                f"allow_spmd_sharding_propagation_to_output={allow_spmd_sharding_propagation_to_output} "
+                "allow_spmd_sharding_propagation_to_parameters=1 "
+                f"num_partitions={num_devices} "
+                "num_replicas=1})"
+            ),
             mlir_filepath,
         ],
         check=True,
@@ -109,7 +121,8 @@ def execute_distributed(
     function: str,
     inputs: List[ArrayLike],
     driver: str,
-) -> List[ArrayLike]:
+    measure_execution_time: bool = False,
+) -> Union[List[ArrayLike], Tuple[List[ArrayLike], timedelta]]:
     with open(mlir_filepath, "r") as f:
         mlir_str = f.read()
     xla_computation = xla_extension.mlir.mlir_module_to_xla_computation(
@@ -127,10 +140,15 @@ def execute_distributed(
         driver=driver,
     )
     sharded_results = swap_shard_axis(sharded_results)
-    return [
+    if measure_execution_time:
+        sharded_results, execution_times = sharded_results
+    res = [
         assemble_shards(shards=result_shards, sharding=sharding)
         for result_shards, sharding in zip(sharded_results, results_sharding)
     ]
+    if measure_execution_time:
+        res = res, timedelta(seconds=np.max(execution_times))
+    return res
 
 
 def validate_sharding_passes(
@@ -143,6 +161,7 @@ def validate_sharding_passes(
     driver: str,
     target_backend: str,
     output_prefix_path: str,
+    allow_spmd_sharding_propagation_to_output: int = 1,
 ):
     # Single instance.
     iree_module_filepath = (
@@ -168,6 +187,7 @@ def validate_sharding_passes(
         output_filepath=spmd_mlir_filepath,
         num_devices=num_devices,
         use_cache=use_cache,
+        allow_spmd_sharding_propagation_to_output=allow_spmd_sharding_propagation_to_output,
     )
     spmd_iree_module_filepath = f"{output_prefix_path}{os.path.basename(spmd_mlir_filepath)}.{target_backend}.vmfb"
     compile_mlir(
