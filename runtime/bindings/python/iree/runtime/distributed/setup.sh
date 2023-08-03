@@ -12,4 +12,4 @@ sudo apt -y install lld
 
 sudo apt -y install libopenmpi-dev
 sudo apt -y install libnccl-dev=2.18.1-1+cuda12.1
-pip install mpi4py
+pip install mpi4py jax[cpu]
