@@ -15,6 +15,9 @@ iree_hal_cts_test_suite(
     "rocm"
   EXECUTABLE_FORMAT
     "\"PTXE\""
+  COMPILER_ARGS
+    "--iree-rocm-target-chip=${IREE_ROCM_TARGET_CHIP}"
+    "--iree-rocm-bc-dir=${IREE_ROCM_BC_DIR}"
   DEPS
     iree::experimental::rocm::registration
   EXCLUDED_TESTS
