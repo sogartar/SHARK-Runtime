@@ -43,6 +43,14 @@ static iree_hal_rocm_native_executable_t* iree_hal_rocm_native_executable_cast(
   return (iree_hal_rocm_native_executable_t*)base_value;
 }
 
+void writeToFile(const char* filename, void* buff, size_t buff_size) {
+  FILE* f = fopen(filename, "w");
+  if (f) {
+    fwrite(buff, 1, buff_size, f);
+    fclose(f);
+  }
+}
+
 iree_status_t iree_hal_rocm_native_executable_create(
     iree_hal_rocm_context_wrapper_t* context,
     const iree_hal_executable_params_t* executable_params,
@@ -78,6 +86,8 @@ iree_status_t iree_hal_rocm_native_executable_create(
     executable->context = context;
     iree_hal_resource_initialize(&iree_hal_rocm_native_executable_vtable,
                                  &executable->resource);
+    writeToFile("iree_hal_rocm_native_executable_create_hipModuleLoadDataEx_image_dump", 
+      (void*)hsaco_image, flatbuffers_string_len(hsaco_image));
     status = ROCM_RESULT_TO_STATUS(
         context->syms,
         hipModuleLoadDataEx(&executable->module, hsaco_image, 0, NULL, NULL),
