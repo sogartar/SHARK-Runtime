@@ -112,6 +112,7 @@ static iree_status_t iree_hal_vulkan_vma_buffer_map_range(
     iree_hal_memory_access_t memory_access,
     iree_device_size_t local_byte_offset, iree_device_size_t local_byte_length,
     iree_hal_buffer_mapping_t* mapping) {
+  return iree_status_from_code(IREE_STATUS_UNIMPLEMENTED);
   iree_hal_vulkan_vma_buffer_t* buffer =
       iree_hal_vulkan_vma_buffer_cast(base_buffer);
 

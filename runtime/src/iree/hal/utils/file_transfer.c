@@ -546,6 +546,9 @@ static iree_status_t iree_hal_transfer_worker_copy_file_to_buffer(
           iree_infinite_timeout(), iree_hal_transfer_worker_copy_file_to_buffer,
           worker);
     }
+  } else {
+    // iree_hal_semaphore_list_wait(wait_semaphore_list, iree_infinite_timeout());
+    // iree_hal_semaphore_list_fail(signal_semaphore_list, status);
   }
 
   if (!iree_status_is_ok(status)) {
