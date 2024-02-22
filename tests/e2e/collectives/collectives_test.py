@@ -96,6 +96,7 @@ def run_test(
     inputs: List[List[ArrayLike]],
     expected_outputs: List[List[ArrayLike]],
     mlir_input_type: iree.compiler.InputType | str = iree.compiler.InputType.AUTO,
+    extra_compiler_args: List[str] = [],
 ):
     with tempfile.TemporaryDirectory() as tmp_dir:
         module_filepath = os.path.join(tmp_dir, "module.vmfb")
@@ -104,7 +105,8 @@ def run_test(
             output_file=module_filepath,
             target_backends=[args.target_backend],
             input_type=mlir_input_type,
-            extra_args=["--iree-hal-cuda-llvm-target-arch", "sm_53"],
+            extra_args=["--iree-hal-cuda-llvm-target-arch", "sm_53"]
+            + extra_compiler_args,
         )
 
         num_ranks = len(inputs)
@@ -197,6 +199,42 @@ class SingleRank(unittest.TestCase):
             expected_outputs=expected_outputs,
         )
 
+    def test_linalg_matmul_sharding_of_reduction_axis(self):
+        """
+        Test mesh sharding of Linalg matrix multiplication on a single device
+        1D mesh operation.
+        The reduction iterator/axis is sharded.
+        | 1 2 | * | 3 | = | 11 |
+                  | 4 |
+        """
+        mlir = """
+            mesh.mesh @mesh(shape = 1)
+
+            func.func @main(%arg0 : tensor<1x2xf32>, %arg1 : tensor<2x1xf32>, %out_dps: tensor<1x1xf32>) -> tensor<1x1xf32> {
+              %arg0_sharded = mesh.shard %arg0 to <@mesh, [[], [0]]> : tensor<1x2xf32>
+              %res = linalg.matmul ins(%arg0_sharded, %arg1 : tensor<1x2xf32>, tensor<2x1xf32>)
+                outs(%out_dps : tensor<1x1xf32>) -> tensor<1x1xf32>
+              %res_sharded = mesh.shard %res to <@mesh, [[]]> annotate_for_users : tensor<1x1xf32>
+              return %res_sharded : tensor<1x1xf32>
+            }
+        """
+        inputs = [
+            [
+                np.array([[1, 2]], dtype=np.float32),
+                np.array([[3], [4]], dtype=np.float32),
+                np.zeros([1, 1], dtype=np.float32),
+            ],
+        ]
+        expected_outputs = [
+            [np.array([[11]], dtype=np.float32)],
+        ]
+        run_test(
+            mlir=mlir,
+            inputs=inputs,
+            expected_outputs=expected_outputs,
+            extra_compiler_args=["--iree-enable-mesh-sharding"],
+        )
+
 
 class TwoRanks(unittest.TestCase):
     def test_stablehlo_all_reduce(self):
@@ -271,6 +309,63 @@ class TwoRanks(unittest.TestCase):
             mlir=mlir,
             inputs=inputs,
             expected_outputs=expected_outputs,
+        )
+
+    def test_linalg_matmul_sharding_of_parallel_axis(self):
+        """
+        Test mesh sharding of Linalg matrix multiplication on a single device
+        1D mesh operation.
+        The parallel axis of the first matrix is sharded.
+                  device 0
+                 /    |   \
+                /     |    \
+               /      |     \
+              ↓       ↓      ↓
+        | 1 2 |   | 5 6 |   | 19 22 |
+        ------- * |     | = |       |
+        | 3 4 |   | 7 8 |   | 43 50 |
+              ^      ^       ^
+               \     |      /
+                \    |     /
+                 \   |    /
+                  device 1
+        """
+        mlir = """
+            mesh.mesh @mesh(shape = 2)
+
+            func.func @main(%arg0 : tensor<2x2xf32>, %arg1 : tensor<2x2xf32>, %out_dps: tensor<2x2xf32>) -> tensor<2x2xf32> {
+              %arg0_sharded = mesh.shard %arg0 to <@mesh, [[0]]> : tensor<2x2xf32>
+              %res = linalg.matmul ins(%arg0_sharded, %arg1 : tensor<2x2xf32>, tensor<2x2xf32>)
+                outs(%out_dps : tensor<2x2xf32>) -> tensor<2x2xf32>
+              %res_sharded = mesh.shard %res to <@mesh, [[]]> annotate_for_users : tensor<2x2xf32>
+              return %res_sharded : tensor<2x2xf32>
+            }
+        """
+        inputs = [
+            # device 0
+            [
+                np.array([[1, 2]], dtype=np.float32),
+                np.array([[5, 6], [7, 8]], dtype=np.float32),
+                np.zeros([1, 2], dtype=np.float32),
+            ],
+            # device 1
+            [
+                np.array([[3, 4]], dtype=np.float32),
+                np.array([[5, 6], [7, 8]], dtype=np.float32),
+                np.zeros([1, 2], dtype=np.float32),
+            ],
+        ]
+        expected_outputs = [
+            # device 0
+            [np.array([[19, 22], [43, 50]], dtype=np.float32)],
+            # device 1
+            [np.array([[19, 22], [43, 50]], dtype=np.float32)],
+        ]
+        run_test(
+            mlir=mlir,
+            inputs=inputs,
+            expected_outputs=expected_outputs,
+            extra_compiler_args=["--iree-enable-mesh-sharding"],
         )
 
 

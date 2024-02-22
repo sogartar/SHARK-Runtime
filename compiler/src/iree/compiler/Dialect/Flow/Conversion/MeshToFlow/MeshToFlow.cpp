@@ -720,8 +720,7 @@ void populateMeshToFlowCollectivesPatterns(
                MeshReduceScatterToFlow, MeshProcessLinearIndexToFlow>(
       symbolTableCollection, useNamedDefaultChannels, patterns.getContext());
   mesh::populateFoldingPatterns(patterns, symbolTableCollection);
-  mesh::populateProcessMultiIndexOpLoweringPatterns(patterns,
-                                                    symbolTableCollection);
+  mesh::populateAllOpLoweringPatterns(patterns, symbolTableCollection);
 }
 
 std::unique_ptr<Pass> createConvertMeshToFlowPass() {
@@ -731,6 +730,7 @@ std::unique_ptr<Pass> createConvertMeshToFlowPass() {
 void registerMeshToFlowDependencies(DialectRegistry &registry) {
   registry.insert<affine::AffineDialect, FlowDialect, linalg::LinalgDialect,
                   mesh::MeshDialect, tensor::TensorDialect>();
+  mesh::registerAllOpLoweringDialects(registry);
 }
 
 void registerMeshToFlowPasses() { registerPasses(); }

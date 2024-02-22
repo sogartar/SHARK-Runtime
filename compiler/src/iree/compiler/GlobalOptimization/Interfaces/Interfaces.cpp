@@ -6,11 +6,13 @@
 
 #include "iree/compiler/GlobalOptimization/Interfaces/Interfaces.h"
 #include "iree/compiler/GlobalOptimization/Interfaces/HoistableTypeInterface.h"
+#include "mlir/Dialect/Linalg/Transforms/MeshShardingInterfaceImpl.h"
 
 namespace mlir::iree_compiler {
 
 void registerGlobalOptimizationInterfaces(DialectRegistry &registry) {
   registerHoistableTypeInterfaces(registry);
+  linalg::registerMeshShardingInterfaceExternalModels(registry);
 }
 
 } // namespace mlir::iree_compiler

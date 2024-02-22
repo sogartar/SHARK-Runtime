@@ -61,6 +61,7 @@ iree_cc_library(
     MLIRLinalgUtils
     MLIRMLProgramDialect
     MLIRMemRefTransforms
+    MLIRMeshTransforms
     MLIRPass
     MLIRSCFDialect
     MLIRSCFToControlFlow
