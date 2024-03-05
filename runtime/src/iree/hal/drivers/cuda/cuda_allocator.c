@@ -443,6 +443,7 @@ static iree_status_t iree_hal_cuda_allocator_allocate_buffer(
       iree_hal_buffer_release(buffer);
     }
   }
+
   return status;
 }
 

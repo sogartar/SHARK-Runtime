@@ -67,8 +67,10 @@ iree_cc_library(
     iree::hal::utils::resource_set
     iree::hal::utils::semaphore_base
     iree::schemas::cuda_executable_def_c_fbs
+    cudart
   PUBLIC
 )
+target_link_options(iree_hal_drivers_cuda_cuda PUBLIC -L /usr/local/cuda-12.3/targets/x86_64-linux/lib -lcudart)
 
 iree_cc_library(
   NAME

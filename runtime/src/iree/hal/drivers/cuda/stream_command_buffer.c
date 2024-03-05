@@ -5,7 +5,11 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "iree/hal/drivers/cuda/stream_command_buffer.h"
+#include <stdio.h>
+#include <unistd.h>
 
+#include "iree/base/status.h"
+#include "iree/hal/buffer.h"
 #include "iree/hal/drivers/cuda/cuda_buffer.h"
 #include "iree/hal/drivers/cuda/cuda_status_util.h"
 #include "iree/hal/drivers/cuda/native_executable.h"
@@ -416,10 +420,61 @@ static iree_status_t iree_hal_cuda_stream_command_buffer_copy_buffer(
   CUdeviceptr dst = target_device_buffer + target_offset;
   CUdeviceptr src = source_device_buffer + source_offset;
 
-  IREE_CUDA_RETURN_AND_END_ZONE_IF_ERROR(
-      z0, command_buffer->cuda_symbols,
+  iree_status_t status;
+  status = IREE_CURESULT_TO_STATUS(
+      command_buffer->cuda_symbols,
+      cuStreamSynchronize(command_buffer->cu_stream),
+      "cuStreamSynchronize");
+  assert(iree_status_is_ok(status));
+
+  assert(cudaGetLastError() == cudaSuccess);
+
+  status = IREE_CURESULT_TO_STATUS(
+      command_buffer->cuda_symbols,
       cuMemcpyAsync(dst, src, length, command_buffer->cu_stream),
       "cuMemcpyAsync");
+
+  {
+    fprintf(stderr, "pid: %d, iree_hal_cuda_stream_command_buffer_copy_buffer source_buffer: ", getpid());
+    iree_string_builder_t str_builder;
+    iree_string_builder_initialize(command_buffer->host_allocator, &str_builder);
+    iree_status_t status = iree_hal_cuda_buffer_format(source_buffer, &str_builder);
+    if (!iree_status_is_ok(status)) {
+      iree_status_fprint(stderr, status);
+      assert(false);
+    }
+    fwrite(str_builder.buffer, 1, str_builder.size, stderr);
+    fprintf(stderr, "\n");
+  }
+
+  {
+    fprintf(stderr, "pid: %d, iree_hal_cuda_stream_command_buffer_copy_buffer target_buffer: ", getpid());
+    iree_string_builder_t str_builder;
+    iree_string_builder_initialize(command_buffer->host_allocator, &str_builder);
+    iree_status_t status = iree_hal_cuda_buffer_format(target_buffer, &str_builder);
+    if (!iree_status_is_ok(status)) {
+      iree_status_fprint(stderr, status);
+      assert(false);
+    }
+    fwrite(str_builder.buffer, 1, str_builder.size, stderr);
+    fprintf(stderr, "\n");
+  }
+
+  if (!iree_status_is_ok(status)) {
+    iree_status_fprint(stderr, status);
+
+    // iree_bitfield_string_temp_t temp0;
+    // fprintf(stderr, "source_buffer->allowed_type = %s\n", iree_hal_memory_type_format(source_buffer->memory_type, &temp0).data);
+    // fprintf(stderr, "source_buffer->allowed_access = %s\n", iree_hal_memory_access_format(source_buffer->allowed_access, &temp0).data);
+    // fprintf(stderr, "source_buffer->allowed_usage = %s\n", iree_hal_buffer_usage_format(source_buffer->allowed_usage, &temp0).data);
+    // fprintf(stderr, "target_buffer->allowed_type = %s\n", iree_hal_memory_type_format(target_buffer->memory_type, &temp0).data);
+    // fprintf(stderr, "target_buffer->allowed_access = %s\n", iree_hal_memory_access_format(target_buffer->allowed_access, &temp0).data);
+    // fprintf(stderr, "target_buffer->allowed_usage = %s\n", iree_hal_buffer_usage_format(target_buffer->allowed_usage, &temp0).data);
+    pid_t pid = getpid();
+    fprintf(stderr, "Waiting to attach to process %d.\n", pid);
+    sleep(99999);
+    fprintf(stderr, "Done waiting to attach to process.\n");
+  }
 
   IREE_TRACE_ZONE_END(z0);
   return iree_ok_status();

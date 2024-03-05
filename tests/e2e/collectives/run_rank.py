@@ -73,6 +73,14 @@ def run_shard(
     outputs: str,
 ):
     rank = MPI.COMM_WORLD.Get_rank()
+
+    import os
+    pid = os.getpid()
+    print(f"Rank {rank} on process {pid}.")
+    # if rank == 0:
+    #     import time
+    #     time.sleep(1)
+
     hal_driver = iree.runtime.get_driver(driver)
     device_infos = hal_driver.query_available_devices()
     device = hal_driver.create_device(

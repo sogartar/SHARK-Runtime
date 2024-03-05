@@ -9,6 +9,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "iree/base/internal/arena.h"
 #include "iree/base/internal/event_pool.h"
@@ -341,6 +342,8 @@ static void iree_hal_cuda_device_destroy(iree_hal_device_t* base_device) {
   iree_hal_driver_release(device->driver);
 
   iree_allocator_free(host_allocator, device);
+
+  fprintf(stderr, "iree_hal_cuda_device_destroy done for process %d.\n", getpid());
 
   IREE_TRACE_ZONE_END(z0);
 }
