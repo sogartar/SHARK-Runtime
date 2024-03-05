@@ -928,6 +928,7 @@ static int iree_hal_cuda_worker_execute(
     iree_status_t status = iree_hal_cuda_worker_process_ready_list(
         working_area->host_allocator, worklist);
     if (IREE_UNLIKELY(!iree_status_is_ok(status))) {
+      iree_status_fprint(stderr, status);
       IREE_ASSERT(false && "error when processing ready list");
       iree_atomic_store_int32(&working_area->error_code,
                               iree_status_code(status),

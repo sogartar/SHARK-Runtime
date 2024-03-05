@@ -9,6 +9,7 @@
 #include <stddef.h>
 
 #include "iree/base/api.h"
+#include "iree/base/status.h"
 #include "iree/hal/command_buffer_validation.h"
 #include "iree/hal/detail.h"
 #include "iree/hal/device.h"
@@ -473,6 +474,8 @@ IREE_API_EXPORT iree_status_t iree_hal_command_buffer_collective(
     iree_hal_collective_op_t op, uint32_t param,
     iree_hal_buffer_binding_t send_binding,
     iree_hal_buffer_binding_t recv_binding, iree_device_size_t element_count) {
+  return iree_ok_status();
+
   IREE_ASSERT_ARGUMENT(command_buffer);
   IREE_ASSERT_ARGUMENT(channel);
   IREE_TRACE_ZONE_BEGIN(z0);

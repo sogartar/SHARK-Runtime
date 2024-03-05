@@ -56,7 +56,7 @@ def run_module(
     config = iree.runtime.Config(device=device)
     with open(module_filepath, "rb") as f:
         vm_flatbuffer = f.read()
-    vm_module = iree.runtime.VmModule.from_flatbuffer(config.vm_instance, vm_flatbuffer)
+    vm_module = iree.runtime.VmModule.copy_buffer(config.vm_instance, vm_flatbuffer)
     bound_module = iree.runtime.load_vm_module(vm_module, config)
     input_args = test_utils.read_numpy_arrays_from_file(input_filepath)
     results = getattr(bound_module, function)(*input_args)
@@ -73,10 +73,18 @@ def run_shard(
     outputs: str,
 ):
     rank = MPI.COMM_WORLD.Get_rank()
+
+    import os
+    pid = os.getpid()
+    print(f"Rank {rank} on process {pid}.")
+    # if rank != 0:
+    #     import time
+    #     time.sleep(1)
+
     hal_driver = iree.runtime.get_driver(driver)
     device_infos = hal_driver.query_available_devices()
     device = hal_driver.create_device(
-        device_infos[rank % len(device_infos)]["device_id"]
+        device_infos[(2 * rank + 1) % len(device_infos)]["device_id"]
     )
     run_module(
         device=device,

@@ -11,7 +11,7 @@ import sys
 import iree.runtime
 from iree.runtime.array_interop import DeviceArray
 import os
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 import numpy as np
 import tempfile
 import subprocess
@@ -22,8 +22,9 @@ ArrayLike = object
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--target_backend", type=str, default="llvm-cpu")
-    parser.add_argument("--driver", type=str, default="local-task")
+    parser.add_argument("--target_backend", type=str, default="vulkan-spirv")
+    parser.add_argument("--driver", type=str, default="vulkan")
+    parser.add_argument("--artifacts_dir", type=str, default=None)
     return parser.parse_known_args()
 
 
@@ -35,7 +36,7 @@ def prepare_shards_io_files(
     for i in range(len(inputs)):
         input_filepath = os.path.join(out_dir, f"shard_{i}", "input.npy")
         input_filepaths.append(input_filepath)
-        os.makedirs(os.path.dirname(input_filepath))
+        os.makedirs(os.path.dirname(input_filepath), exist_ok=True)
         test_utils.write_numpy_arrays_to_file(filepath=input_filepath, arrays=inputs[i])
         output_filepath = os.path.join(out_dir, f"shard_{i}", "output.npy")
         output_filepaths.append(output_filepath)
@@ -48,6 +49,7 @@ def run_ranks(
     function: str,
     inputs: List[List[ArrayLike]],
     driver: str,
+    artifacts_dir: Optional[str] = None
 ) -> List[List[DeviceArray]]:
     """
     Start all ranks with mpirun.
@@ -62,7 +64,8 @@ def run_ranks(
     The output of the function for all ranks.
     Axis 0 is ranks. Axis 1 is arguments per rank.
     """
-    with tempfile.TemporaryDirectory() as out_dir:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        out_dir = tmp_dir if artifacts_dir is None else artifacts_dir
         input_filepaths, output_filepaths = prepare_shards_io_files(
             inputs=inputs, out_dir=out_dir
         )
@@ -96,9 +99,17 @@ def run_test(
     inputs: List[List[ArrayLike]],
     expected_outputs: List[List[ArrayLike]],
     mlir_input_type: iree.compiler.InputType | str = iree.compiler.InputType.AUTO,
+    artifacts_dir: Optional[str] = None,
+    name: Optional[str] = None
 ):
+    if artifacts_dir is None:
+        artifacts_dir = args.artifacts_dir
     with tempfile.TemporaryDirectory() as tmp_dir:
-        module_filepath = os.path.join(tmp_dir, "module.vmfb")
+        test_dir = tmp_dir if artifacts_dir is None else artifacts_dir
+        if name is not None:
+            test_dir = os.path.join(test_dir, name)
+        os.makedirs(test_dir, exist_ok=True)
+        module_filepath = os.path.join(test_dir, "module.vmfb")
         iree.compiler.tools.compile_str(
             input_str=mlir,
             output_file=module_filepath,
@@ -115,6 +126,7 @@ def run_test(
             driver=args.driver,
             module_filepath=module_filepath,
             inputs=inputs,
+            artifacts_dir=test_dir
         )
         for rank in range(num_ranks):
             np.testing.assert_allclose(
@@ -142,11 +154,41 @@ class SingleRank(unittest.TestCase):
         """
         inputs = [[np.array([1, 2, 3, 4], dtype=np.float32)]]
         expected_outputs = [[np.array([1, 2, 3, 4], dtype=np.float32)]]
+        global args
         run_test(
             mlir=stablehlo_mlir,
             inputs=inputs,
             expected_outputs=expected_outputs,
             mlir_input_type=iree.compiler.InputType.STABLEHLO,
+            name="SingleRank.test_stablehlo_all_reduce"
+        )
+
+    @unittest.skip
+    def test_matmul_in_a_loop(self):
+        stablehlo_mlir = """
+            func.func @main(%input : tensor<2x2xf32>) -> tensor<2x2xf32> {
+                %step = arith.constant 0 : index
+                %lb = arith.constant 1 : index
+                %ub = arith.constant 101 : index
+                %out = scf.for %iv = %lb to %ub step %step
+                    iter_args(%iter = %input) -> (tensor<2x2xf32>) {
+                    %dps_init = tensor.empty() : tensor<2x2xf32>
+                    %next = linalg.matmul ins(%iter, %iter : tensor<2x2xf32>, tensor<2x2xf32>)
+                        outs(%dps_init : tensor<2x2xf32>) -> tensor<2x2xf32>
+                    scf.yield %next : tensor<2x2xf32>
+                }
+                return %out : tensor<2x2xf32>
+            }
+        """
+        inputs = [[np.array([[1, 2], [3, 4]], dtype=np.float32)]]
+        expected_outputs = [[np.array([[1, 2], [3, 4]], dtype=np.float32)]]
+        global args
+        run_test(
+            mlir=stablehlo_mlir,
+            inputs=inputs,
+            expected_outputs=expected_outputs,
+            mlir_input_type=iree.compiler.InputType.STABLEHLO,
+            name="SingleRank.test_stablehlo_all_reduce"
         )
 
     def test_mesh_all_reduce(self):
@@ -158,13 +200,15 @@ class SingleRank(unittest.TestCase):
             mesh.mesh @mesh(shape = 1)
 
             func.func @main(%input : tensor<4xf32>) -> tensor<4xf32> {
-            %out = mesh.all_reduce %input on @mesh mesh_axes = [0] : tensor<4xf32> -> tensor<4xf32>
-            return %out : tensor<4xf32>
+                %out = mesh.all_reduce %input on @mesh mesh_axes = [0] : tensor<4xf32> -> tensor<4xf32>
+                return %out : tensor<4xf32>
             }
         """
         inputs = [[np.array([1, 2, 3, 4], dtype=np.float32)]]
         expected_outputs = [[np.array([1, 2, 3, 4], dtype=np.float32)]]
-        run_test(mlir=mlir, inputs=inputs, expected_outputs=expected_outputs)
+        global args
+        run_test(mlir=mlir, inputs=inputs, expected_outputs=expected_outputs,
+                name="SingleRank.test_mesh_all_reduce")
 
     def test_mesh_all_to_all(self):
         """
@@ -180,9 +224,9 @@ class SingleRank(unittest.TestCase):
             mesh.mesh @mesh(shape = 1)
 
             func.func @main(%input : tensor<2x2xf32>) -> tensor<2x2xf32> {
-            %out = mesh.all_to_all %input on @mesh mesh_axes = [0]
-              split_axis = 0 concat_axis = 1 : tensor<2x2xf32> -> tensor<2x2xf32>
-            return %out : tensor<2x2xf32>
+                %out = mesh.all_to_all %input on @mesh mesh_axes = [0]
+                split_axis = 0 concat_axis = 1 : tensor<2x2xf32> -> tensor<2x2xf32>
+                return %out : tensor<2x2xf32>
             }
         """
         inputs = [
@@ -191,10 +235,12 @@ class SingleRank(unittest.TestCase):
         expected_outputs = [
             [np.array([[1, 2], [3, 4]], dtype=np.float32)],
         ]
+        global args
         run_test(
             mlir=mlir,
             inputs=inputs,
             expected_outputs=expected_outputs,
+            name="SingleRank.test_mesh_all_to_all"
         )
 
 
@@ -225,6 +271,7 @@ class TwoRanks(unittest.TestCase):
             inputs=inputs,
             expected_outputs=expected_outputs,
             mlir_input_type=iree.compiler.InputType.STABLEHLO,
+            name="TowRanks.test_stablehlo_all_reduce"
         )
 
     def test_mesh_all_reduce_1d_mesh(self):
@@ -235,8 +282,8 @@ class TwoRanks(unittest.TestCase):
             mesh.mesh @mesh(shape = 2)
 
             func.func @main(%input : tensor<4xf32>) -> tensor<4xf32> {
-            %out = mesh.all_reduce %input on @mesh mesh_axes = [0] : tensor<4xf32> -> tensor<4xf32>
-            return %out : tensor<4xf32>
+                %out = mesh.all_reduce %input on @mesh mesh_axes = [0] : tensor<4xf32> -> tensor<4xf32>
+                return %out : tensor<4xf32>
             }
         """
         inputs = [
@@ -248,6 +295,7 @@ class TwoRanks(unittest.TestCase):
             mlir=mlir,
             inputs=inputs,
             expected_outputs=expected_outputs,
+            name="TowRanks.test_mesh_all_reduce_1d_mesh"
         )
 
     def test_mesh_all_reduce_3d_mesh(self):
@@ -258,8 +306,8 @@ class TwoRanks(unittest.TestCase):
             mesh.mesh @mesh(shape = 1x2x1)
 
             func.func @main(%input : tensor<4xf32>) -> tensor<4xf32> {
-            %out = mesh.all_reduce %input on @mesh mesh_axes = [1] : tensor<4xf32> -> tensor<4xf32>
-            return %out : tensor<4xf32>
+                %out = mesh.all_reduce %input on @mesh mesh_axes = [1] : tensor<4xf32> -> tensor<4xf32>
+                return %out : tensor<4xf32>
             }
         """
         inputs = [
@@ -271,6 +319,7 @@ class TwoRanks(unittest.TestCase):
             mlir=mlir,
             inputs=inputs,
             expected_outputs=expected_outputs,
+            name="TowRanks.test_mesh_all_reduce_3d_mesh"
         )
 
 
@@ -296,8 +345,8 @@ class FourRanks(unittest.TestCase):
             mesh.mesh @mesh(shape = 2x2)
 
             func.func @main(%input : tensor<2xf32>) -> tensor<2xf32> {
-            %out = mesh.all_reduce %input on @mesh mesh_axes = [1] : tensor<2xf32> -> tensor<2xf32>
-            return %out : tensor<2xf32>
+                %out = mesh.all_reduce %input on @mesh mesh_axes = [1] : tensor<2xf32> -> tensor<2xf32>
+                return %out : tensor<2xf32>
             }
         """
         inputs = [
@@ -316,6 +365,7 @@ class FourRanks(unittest.TestCase):
             mlir=mlir,
             inputs=inputs,
             expected_outputs=expected_outputs,
+            name="FourRanks.test_mesh_all_reduce_on_2d_mesh_along_axis_1"
         )
 
     def test_mesh_all_reduce_on_2d_mesh_along_axis_0(self):
@@ -339,8 +389,8 @@ class FourRanks(unittest.TestCase):
             mesh.mesh @mesh(shape = 2x2)
 
             func.func @main(%input : tensor<2xf32>) -> tensor<2xf32> {
-            %out = mesh.all_reduce %input on @mesh mesh_axes = [0] : tensor<2xf32> -> tensor<2xf32>
-            return %out : tensor<2xf32>
+                %out = mesh.all_reduce %input on @mesh mesh_axes = [0] : tensor<2xf32> -> tensor<2xf32>
+                return %out : tensor<2xf32>
             }
         """
         inputs = [
@@ -359,6 +409,118 @@ class FourRanks(unittest.TestCase):
             mlir=mlir,
             inputs=inputs,
             expected_outputs=expected_outputs,
+            name="FourRanks.test_mesh_all_reduce_on_2d_mesh_along_axis_0"
+        )
+
+
+    @unittest.skip
+    def test_loop_mesh_all_reduce_on_2d_mesh_along_axis_0(self):
+        """
+        Test on a 2x2 device mesh multiple consecutive reductions in a loop
+        along mesh dimension 0.
+        Mesh devices:
+        axis 1
+        ------>
+        0 1
+        2 3
+
+        Device contents before operation:
+        [1, 2] [3, 4]
+        [5, 6] [7, 8]
+
+        Device contents after operation:
+        [600, 800] [1000, 1200]
+        [600, 800] [1000, 1200]
+        """
+        mlir = """
+            mesh.mesh @mesh(shape = 2x2)
+
+            func.func @main(%input : tensor<2xf32>) -> tensor<2xf32> {
+                %step = arith.constant 0 : index
+                %lb = arith.constant 1 : index
+                %ub = arith.constant 101 : index
+                %out = scf.for %iv = %lb to %ub step %step
+                    iter_args(%sum_iter = %input) -> (tensor<2xf32>) {
+                    %sum_next = mesh.all_reduce %sum_iter on @mesh mesh_axes = [0] : tensor<2xf32> -> tensor<2xf32>
+                    scf.yield %sum_next : tensor<2xf32>
+                }
+                return %out : tensor<2xf32>
+            }
+        """
+        inputs = [
+            [np.array([1, 2], dtype=np.float32)],
+            [np.array([3, 4], dtype=np.float32)],
+            [np.array([5, 6], dtype=np.float32)],
+            [np.array([7, 8], dtype=np.float32)],
+        ]
+        expected_outputs = [
+            [np.array([600, 800], dtype=np.float32)],
+            [np.array([1000, 1200], dtype=np.float32)],
+            [np.array([600, 800], dtype=np.float32)],
+            [np.array([1000, 1200], dtype=np.float32)],
+        ]
+        run_test(
+            mlir=mlir,
+            inputs=inputs,
+            expected_outputs=expected_outputs,
+            name="FourRanks.test_loop_mesh_all_reduce_on_2d_mesh_along_axis_0"
+        )
+
+    def test_unrolled_mesh_all_reduce_and_matmul_on_2d_mesh_along_axis_0(self):
+        """
+        Test on a 2x2 device mesh multiple consecutive reductions in a loop
+        along mesh dimension 0.
+        Mesh devices:
+        axis 1
+        ------>
+        0 1
+        2 3
+
+        Device contents before operation:
+        [1, 2] [3, 4]
+        [5, 6] [7, 8]
+
+        Device contents after operation:
+        [?, ?] [?, ?]
+        [?, ?] [?, ?]
+        """
+        # Genereate MLIR
+        unrolled_loop = ""
+        loop_result_var_name = "input"
+        for i in range(100):
+            unrolled_loop += f"""
+                %v{i}_0 = mesh.all_reduce %{loop_result_var_name} on @mesh mesh_axes = [0] : tensor<2x2xf32> -> tensor<2x2xf32>
+                %v{i}_1 = linalg.matmul ins(%v{i}_0, %v{i}_0 : tensor<2x2xf32>, tensor<2x2xf32>)
+                        outs(%dps_init : tensor<2x2xf32>) -> tensor<2x2xf32>
+            """
+            loop_result_var_name = f"v{i}_1"
+
+        mlir = f"""
+            mesh.mesh @mesh(shape = 2x2)
+
+            func.func @main(%input : tensor<2x2xf32>) -> tensor<2x2xf32> {{
+                %dps_init = tensor.empty() : tensor<2x2xf32>
+                {unrolled_loop}
+                return %{loop_result_var_name} : tensor<2x2xf32>
+            }}
+        """
+        inputs = [
+            [np.array([[1, 2], [3, 4]], dtype=np.float32)],
+            [np.array([[5, 6], [7, 8]], dtype=np.float32)],
+            [np.array([[9, 10], [11, 12]], dtype=np.float32)],
+            [np.array([[13, 14], [15, 16]], dtype=np.float32)],
+        ]
+        expected_outputs = [
+            [np.array([[1, 2], [3, 4]], dtype=np.float32)],
+            [np.array([[5, 6], [7, 8]], dtype=np.float32)],
+            [np.array([[9, 10], [11, 12]], dtype=np.float32)],
+            [np.array([[13, 14], [15, 16]], dtype=np.float32)],
+        ]
+        run_test(
+            mlir=mlir,
+            inputs=inputs,
+            expected_outputs=expected_outputs,
+            name="FourRanks.test_loop_mesh_all_reduce_on_2d_mesh_along_axis_0"
         )
 
     def test_mesh_all_reduce_on_4d_mesh_along_1_axis(self):
@@ -382,8 +544,8 @@ class FourRanks(unittest.TestCase):
             mesh.mesh @mesh(shape = 1x2x1x2)
 
             func.func @main(%input : tensor<2xf32>) -> tensor<2xf32> {
-            %out = mesh.all_reduce %input on @mesh mesh_axes = [1] : tensor<2xf32> -> tensor<2xf32>
-            return %out : tensor<2xf32>
+                %out = mesh.all_reduce %input on @mesh mesh_axes = [1] : tensor<2xf32> -> tensor<2xf32>
+                return %out : tensor<2xf32>
             }
         """
         inputs = [
@@ -402,6 +564,7 @@ class FourRanks(unittest.TestCase):
             mlir=mlir,
             inputs=inputs,
             expected_outputs=expected_outputs,
+            name="FourRanks.test_mesh_all_reduce_on_4d_mesh_along_1_axis"
         )
 
     def test_mesh_all_to_all_on_4d_mesh_along_1_axis(self):
@@ -425,9 +588,9 @@ class FourRanks(unittest.TestCase):
             mesh.mesh @mesh(shape = 1x2x1x2)
 
             func.func @main(%input : tensor<2x1xf32>) -> tensor<1x2xf32> {
-            %out = mesh.all_to_all %input on @mesh mesh_axes = [1]
-              split_axis = 0 concat_axis = 1 : tensor<2x1xf32> -> tensor<1x2xf32>
-            return %out : tensor<1x2xf32>
+                %out = mesh.all_to_all %input on @mesh mesh_axes = [1]
+                split_axis = 0 concat_axis = 1 : tensor<2x1xf32> -> tensor<1x2xf32>
+                return %out : tensor<1x2xf32>
             }
         """
         inputs = [
@@ -446,6 +609,7 @@ class FourRanks(unittest.TestCase):
             mlir=mlir,
             inputs=inputs,
             expected_outputs=expected_outputs,
+            name="FourRanks.test_mesh_all_to_all_on_4d_mesh_along_1_axis"
         )
 
 

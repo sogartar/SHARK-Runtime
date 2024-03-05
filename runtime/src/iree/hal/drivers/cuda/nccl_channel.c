@@ -141,6 +141,8 @@ iree_status_t iree_hal_cuda_nccl_channel_create(
 
 static void iree_hal_cuda_nccl_channel_destroy(
     iree_hal_channel_t* base_channel) {
+  // return;
+
   iree_hal_cuda_nccl_channel_t* channel =
       iree_hal_cuda_nccl_channel_cast(base_channel);
   IREE_TRACE_ZONE_BEGIN(z0);
