@@ -8,6 +8,7 @@
 #define IREE_HAL_DRIVERS_CUDA_CUDA_BUFFER_H_
 
 #include "iree/base/api.h"
+#include "iree/base/string_builder.h"
 #include "iree/hal/api.h"
 #include "iree/hal/drivers/cuda/cuda_headers.h"
 
@@ -31,6 +32,9 @@ typedef enum iree_hal_cuda_buffer_type_e {
   // Must be freed by the user.
   IREE_HAL_CUDA_BUFFER_TYPE_EXTERNAL,
 } iree_hal_cuda_buffer_type_t;
+
+IREE_API_EXPORT iree_status_t iree_hal_cuda_buffer_type_format(
+    iree_hal_cuda_buffer_type_t value, iree_string_builder_t* str_builder);
 
 // Wraps a CUDA allocation in an iree_hal_buffer_t.
 iree_status_t iree_hal_cuda_buffer_wrap(
@@ -61,6 +65,9 @@ void* iree_hal_cuda_buffer_host_pointer(const iree_hal_buffer_t* buffer);
 // holding an allocation and the earliest the buffer could be destroyed is after
 // this call returns and the caller has released its reference.
 void iree_hal_cuda_buffer_drop_release_callback(iree_hal_buffer_t* buffer);
+
+iree_status_t iree_hal_cuda_buffer_format(
+    iree_hal_buffer_t* buffer, iree_string_builder_t* str_builder);
 
 #ifdef __cplusplus
 }  // extern "C"

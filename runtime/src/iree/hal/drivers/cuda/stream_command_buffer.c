@@ -5,8 +5,14 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "iree/hal/drivers/cuda/stream_command_buffer.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
 
+#include "iree/base/status.h"
+#include "iree/hal/buffer.h"
 #include "iree/hal/drivers/cuda/cuda_buffer.h"
+#include "iree/hal/drivers/cuda/cuda_device.h"
 #include "iree/hal/drivers/cuda/cuda_status_util.h"
 #include "iree/hal/drivers/cuda/native_executable.h"
 #include "iree/hal/drivers/cuda/nccl_channel.h"
@@ -137,6 +143,8 @@ bool iree_hal_cuda_stream_command_buffer_isa(
 // or a barrier is encountered.
 static iree_status_t iree_hal_cuda_stream_command_buffer_flush_collectives(
     iree_hal_cuda_stream_command_buffer_t* command_buffer) {
+  return iree_ok_status();
+
   // NOTE: we could move this out into callers by way of an always-inline shim -
   // that would make this a single compare against the command buffer state we
   // are likely to access immediately after anyway and keep overheads minimal.
@@ -394,6 +402,82 @@ static iree_status_t iree_hal_cuda_stream_command_buffer_update_buffer(
   return iree_ok_status();
 }
 
+static iree_status_t iree_hal_cuda_cu_stream_get_cu_device(const iree_hal_cuda_dynamic_symbols_t* syms, CUstream stream, CUdevice* device) {
+  CUcontext ctx;
+  iree_status_t status;
+  status = IREE_CURESULT_TO_STATUS(
+      syms,
+      cuStreamGetCtx(stream, &ctx),
+      "cuStreamGetCtx");
+  if(!iree_status_is_ok(status)) {
+    return status;
+  }
+  status = IREE_CURESULT_TO_STATUS(
+      syms,
+      cuCtxPushCurrent(ctx),
+      "cuCtxPushCurrent");
+  if(!iree_status_is_ok(status)) {
+    return status;
+  }
+
+  status = IREE_CURESULT_TO_STATUS(
+      syms,
+      cuCtxGetDevice(device),
+      "cuCtxGetDevice");
+  if(!iree_status_is_ok(status)) {
+    IREE_CUDA_IGNORE_ERROR(syms, cuCtxPopCurrent(&ctx));
+    return status;
+  }
+
+  status = IREE_CURESULT_TO_STATUS(
+    syms,
+    cuCtxPopCurrent(&ctx),
+    "cuCtxPopCurrent");
+  if(!iree_status_is_ok(status)) {
+    return status;
+  }
+
+  return status;
+}
+
+static iree_status_t iree_hal_cuda_cu_stream_sync_context(const iree_hal_cuda_dynamic_symbols_t* syms, CUstream stream) {
+  CUcontext ctx;
+  iree_status_t status;
+  status = IREE_CURESULT_TO_STATUS(
+      syms,
+      cuStreamGetCtx(stream, &ctx),
+      "cuStreamGetCtx");
+  if(!iree_status_is_ok(status)) {
+    return status;
+  }
+  status = IREE_CURESULT_TO_STATUS(
+      syms,
+      cuCtxPushCurrent(ctx),
+      "cuCtxPushCurrent");
+  if(!iree_status_is_ok(status)) {
+    return status;
+  }
+
+  status = IREE_CURESULT_TO_STATUS(
+      syms,
+      cuCtxSynchronize(),
+      "cuCtxSynchronize");
+  if(!iree_status_is_ok(status)) {
+    IREE_CUDA_IGNORE_ERROR(syms, cuCtxPopCurrent(&ctx));
+    return status;
+  }
+
+  status = IREE_CURESULT_TO_STATUS(
+    syms,
+    cuCtxPopCurrent(&ctx),
+    "cuCtxPopCurrent");
+  if(!iree_status_is_ok(status)) {
+    return status;
+  }
+
+  return status;
+}
+
 static iree_status_t iree_hal_cuda_stream_command_buffer_copy_buffer(
     iree_hal_command_buffer_t* base_command_buffer,
     iree_hal_buffer_t* source_buffer, iree_device_size_t source_offset,
@@ -416,10 +500,98 @@ static iree_status_t iree_hal_cuda_stream_command_buffer_copy_buffer(
   CUdeviceptr dst = target_device_buffer + target_offset;
   CUdeviceptr src = source_device_buffer + source_offset;
 
-  IREE_CUDA_RETURN_AND_END_ZONE_IF_ERROR(
-      z0, command_buffer->cuda_symbols,
+  IREE_CHECK_OK(IREE_CURESULT_TO_STATUS(
+      command_buffer->cuda_symbols,
+      cuStreamSynchronize(command_buffer->cu_stream),
+      "cuStreamSynchronize"));
+
+  CUdevice cu_device;
+  IREE_CHECK_OK(iree_hal_cuda_cu_stream_get_cu_device(command_buffer->cuda_symbols, command_buffer->cu_stream, &cu_device));
+  CUuuid device_uuid;
+  memset(&device_uuid, 0, sizeof(device_uuid));
+  IREE_CHECK_OK(IREE_CURESULT_TO_STATUS(
+      command_buffer->cuda_symbols,
+      cuDeviceGetUuid(&device_uuid, cu_device),
+      "cuDeviceGetUuid"));
+  fprintf(stdout,
+    "pid: %d, iree_hal_cuda_stream_command_buffer_copy_buffer stream device uuid = "
+    "GPU-"
+           "%02x%02x%02x%02x-"
+           "%02x%02x-"
+           "%02x%02x-"
+           "%02x%02x-"
+           "%02x%02x%02x%02x%02x%02x"
+    "\n"
+  , getpid(), (uint8_t)device_uuid.bytes[0], (uint8_t)device_uuid.bytes[1],
+           (uint8_t)device_uuid.bytes[2], (uint8_t)device_uuid.bytes[3],
+           (uint8_t)device_uuid.bytes[4], (uint8_t)device_uuid.bytes[5],
+           (uint8_t)device_uuid.bytes[6], (uint8_t)device_uuid.bytes[7],
+           (uint8_t)device_uuid.bytes[8], (uint8_t)device_uuid.bytes[9],
+           (uint8_t)device_uuid.bytes[10], (uint8_t)device_uuid.bytes[11],
+           (uint8_t)device_uuid.bytes[12], (uint8_t)device_uuid.bytes[13],
+           (uint8_t)device_uuid.bytes[14], (uint8_t)device_uuid.bytes[15]);
+
+  IREE_CHECK_OK(iree_hal_cuda_cu_stream_sync_context(command_buffer->cuda_symbols, command_buffer->cu_stream));
+
+  // int device_ordinal;
+  // assert(cudaGetDevice(&device_ordinal)  == cudaSuccess);
+  // fprintf(stdout, "pid: %d, iree_hal_cuda_stream_command_buffer_copy_buffer cudart_device_ordinal = %d\n", getpid(), device_ordinal);
+  // //assert(cudaSetDevice(iree_hal_cuda_device_get_cudevice(base_command_buffer->validation.device)) == cudaSuccess);
+  // assert(cudaSetDeviceFlags(cudaDeviceScheduleBlockingSync) == cudaSuccess);
+  // assert(cudaDeviceSynchronize() == cudaSuccess);
+  // assert(cudaGetLastError() == cudaSuccess);
+
+  //sleep(rand() % 2);
+
+  iree_status_t status;
+  status = IREE_CURESULT_TO_STATUS(
+      command_buffer->cuda_symbols,
       cuMemcpyAsync(dst, src, length, command_buffer->cu_stream),
       "cuMemcpyAsync");
+
+  {
+    fprintf(stdout, "pid: %d, iree_hal_cuda_stream_command_buffer_copy_buffer source_buffer: ", getpid());
+    iree_string_builder_t str_builder;
+    iree_string_builder_initialize(command_buffer->host_allocator, &str_builder);
+    IREE_CHECK_OK(iree_hal_cuda_buffer_format(source_buffer, &str_builder));
+    fwrite(str_builder.buffer, 1, str_builder.size, stdout);
+    fprintf(stdout, "\n");
+  }
+
+  {
+    fprintf(stdout, "pid: %d, iree_hal_cuda_stream_command_buffer_copy_buffer target_buffer: ", getpid());
+    iree_string_builder_t str_builder;
+    iree_string_builder_initialize(command_buffer->host_allocator, &str_builder);
+    IREE_CHECK_OK(iree_hal_cuda_buffer_format(target_buffer, &str_builder));
+    fwrite(str_builder.buffer, 1, str_builder.size, stdout);
+    fprintf(stdout, "\n");
+  }
+
+  fprintf(stdout,
+    "pid: %d, iree_hal_cuda_stream_command_buffer_copy_buffer target_buffer: "
+    "source_offset = %zu, "
+    "target_offset = %zu, "
+    "length = %zu\n",
+    getpid(),
+    source_offset,
+    target_offset,
+    length);
+
+  if (!iree_status_is_ok(status)) {
+    iree_status_fprint(stderr, status);
+    // iree_bitfield_string_temp_t temp0;
+    // fprintf(stdout, "source_buffer->allowed_type = %s\n", iree_hal_memory_type_format(source_buffer->memory_type, &temp0).data);
+    // fprintf(stdout, "source_buffer->allowed_access = %s\n", iree_hal_memory_access_format(source_buffer->allowed_access, &temp0).data);
+    // fprintf(stdout, "source_buffer->allowed_usage = %s\n", iree_hal_buffer_usage_format(source_buffer->allowed_usage, &temp0).data);
+    // fprintf(stdout, "target_buffer->allowed_type = %s\n", iree_hal_memory_type_format(target_buffer->memory_type, &temp0).data);
+    // fprintf(stdout, "target_buffer->allowed_access = %s\n", iree_hal_memory_access_format(target_buffer->allowed_access, &temp0).data);
+    // fprintf(stdout, "target_buffer->allowed_usage = %s\n", iree_hal_buffer_usage_format(target_buffer->allowed_usage, &temp0).data);
+    // pid_t pid = getpid();
+    // fprintf(stderr, "Waiting to attach to process %d.\n", pid);
+    // sleep(99999);
+    // fprintf(stderr, "Done waiting to attach to process.\n");
+    assert(iree_status_is_ok(status));
+  }
 
   IREE_TRACE_ZONE_END(z0);
   return iree_ok_status();
@@ -430,6 +602,8 @@ static iree_status_t iree_hal_cuda_stream_command_buffer_collective(
     iree_hal_collective_op_t op, uint32_t param,
     iree_hal_buffer_binding_t send_binding,
     iree_hal_buffer_binding_t recv_binding, iree_device_size_t element_count) {
+  return iree_ok_status();
+
   iree_hal_cuda_stream_command_buffer_t* command_buffer =
       iree_hal_cuda_stream_command_buffer_cast(base_command_buffer);
   IREE_TRACE_ZONE_BEGIN(z0);

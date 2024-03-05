@@ -9,8 +9,12 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "iree/base/api.h"
+#include "iree/base/status.h"
+#include "iree/base/string_builder.h"
+#include "iree/base/string_view.h"
 
 typedef struct iree_hal_cuda_buffer_t {
   iree_hal_buffer_t base;
@@ -32,6 +36,30 @@ static const iree_hal_cuda_buffer_t* iree_hal_cuda_buffer_const_cast(
     const iree_hal_buffer_t* base_value) {
   IREE_HAL_ASSERT_TYPE(base_value, &iree_hal_cuda_buffer_vtable);
   return (const iree_hal_cuda_buffer_t*)base_value;
+}
+
+static const iree_bitfield_string_mapping_t iree_hal_memory_type_mappings[] = {
+    {IREE_HAL_CUDA_BUFFER_TYPE_DEVICE, IREE_SVL("DEVICE")},
+    {IREE_HAL_CUDA_BUFFER_TYPE_HOST, IREE_SVL("HOST")},
+    {IREE_HAL_CUDA_BUFFER_TYPE_HOST_REGISTERED, IREE_SVL("HOST_REGISTERED")},
+    {IREE_HAL_CUDA_BUFFER_TYPE_ASYNC, IREE_SVL("ASYNC")},
+    {IREE_HAL_CUDA_BUFFER_TYPE_EXTERNAL, IREE_SVL("EXTERNAL")},
+};
+
+IREE_API_EXPORT iree_status_t iree_hal_cuda_buffer_type_format(
+    iree_hal_cuda_buffer_type_t value, iree_string_builder_t* str_builder) {
+  switch (value) {
+  case IREE_HAL_CUDA_BUFFER_TYPE_DEVICE:
+    return iree_string_builder_append_format(str_builder, "DEVICE");
+  case IREE_HAL_CUDA_BUFFER_TYPE_HOST:
+    return iree_string_builder_append_format(str_builder, "HOST");
+  case IREE_HAL_CUDA_BUFFER_TYPE_HOST_REGISTERED:
+    return iree_string_builder_append_format(str_builder, "HOST_REGISTERED");
+  case IREE_HAL_CUDA_BUFFER_TYPE_ASYNC:
+    return iree_string_builder_append_format(str_builder, "ASYNC");
+  case IREE_HAL_CUDA_BUFFER_TYPE_EXTERNAL:
+    return iree_string_builder_append_format(str_builder, "EXTERNAL");
+  }
 }
 
 iree_status_t iree_hal_cuda_buffer_wrap(
@@ -65,6 +93,16 @@ iree_status_t iree_hal_cuda_buffer_wrap(
     buffer->device_ptr = device_ptr;
     buffer->release_callback = release_callback;
     *out_buffer = &buffer->base;
+  }
+
+  {
+
+    fprintf(stdout, "pid: %d, iree_hal_cuda_buffer_wrap out_buffer: ", getpid());
+    iree_string_builder_t str_builder;
+    iree_string_builder_initialize(host_allocator, &str_builder);
+    IREE_CHECK_OK(iree_hal_cuda_buffer_format(*out_buffer, &str_builder));
+    fwrite(str_builder.buffer, 1, str_builder.size, stdout);
+    fprintf(stdout, "\n");
   }
 
   IREE_TRACE_ZONE_END(z0);
@@ -163,6 +201,42 @@ void iree_hal_cuda_buffer_drop_release_callback(
     iree_hal_buffer_t* base_buffer) {
   iree_hal_cuda_buffer_t* buffer = iree_hal_cuda_buffer_cast(base_buffer);
   buffer->release_callback = iree_hal_buffer_release_callback_null();
+}
+
+iree_status_t iree_hal_cuda_buffer_format(
+    iree_hal_buffer_t* buffer, iree_string_builder_t* str_builder) {
+  iree_hal_cuda_buffer_t* cuda_buffer = iree_hal_cuda_buffer_cast(buffer);
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(str_builder, "type = "));
+  IREE_RETURN_IF_ERROR(iree_hal_cuda_buffer_type_format(cuda_buffer->type, str_builder));
+  iree_bitfield_string_temp_t memory_type_temp;
+  iree_string_view_t memory_type = iree_hal_memory_type_format(buffer->memory_type, &memory_type_temp);
+  iree_bitfield_string_temp_t allowed_access_temp;
+  iree_string_view_t allowed_access = iree_hal_memory_access_format(buffer->allowed_access, &allowed_access_temp);
+  iree_bitfield_string_temp_t allowed_usage_temp;
+  iree_string_view_t allowed_usage = iree_hal_buffer_usage_format(buffer->allowed_usage, &allowed_usage_temp);
+  return iree_string_builder_append_format(str_builder,
+    ", "
+    "host_ptr = %p, "
+    "device_ptr = 0x%llx, "
+    "allocated_buffer = %p, "
+    "allocation_size = %zu, "
+    "byte_offset = %zu, "
+    "byte_length = %zu, "
+    "host_allocator.self = %p, "
+    "device_allocator = %p, "
+    "memory_type = %.*s, "
+    "allowed_access = %.*s, "
+    "allowed_usage = %.*s, "
+    "flags = 0x%hx",
+    cuda_buffer->host_ptr, cuda_buffer->device_ptr,
+    buffer->allocated_buffer,
+    buffer->allocation_size, buffer->byte_offset, buffer->byte_length,
+    buffer->host_allocator.self,
+    buffer->device_allocator,
+    (int)memory_type.size, memory_type.data,
+    (int)allowed_access.size, allowed_access.data,
+    (int)allowed_usage.size, allowed_usage.data,
+    buffer->flags);
 }
 
 static const iree_hal_buffer_vtable_t iree_hal_cuda_buffer_vtable = {
