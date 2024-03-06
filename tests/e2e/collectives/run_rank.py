@@ -77,14 +77,14 @@ def run_shard(
     import os
     pid = os.getpid()
     print(f"Rank {rank} on process {pid}.")
-    # if rank == 0:
+    # if rank != 0:
     #     import time
     #     time.sleep(1)
 
     hal_driver = iree.runtime.get_driver(driver)
     device_infos = hal_driver.query_available_devices()
     device = hal_driver.create_device(
-        device_infos[rank % len(device_infos)]["device_id"]
+        device_infos[(rank + 2) % len(device_infos)]["device_id"]
     )
     run_module(
         device=device,

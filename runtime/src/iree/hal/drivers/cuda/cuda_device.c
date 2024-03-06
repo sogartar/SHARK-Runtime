@@ -14,6 +14,7 @@
 #include "iree/base/internal/arena.h"
 #include "iree/base/internal/event_pool.h"
 #include "iree/base/internal/math.h"
+#include "iree/base/status.h"
 #include "iree/hal/drivers/cuda/cuda_allocator.h"
 #include "iree/hal/drivers/cuda/cuda_dynamic_symbols.h"
 #include "iree/hal/drivers/cuda/cuda_status_util.h"
@@ -294,6 +295,12 @@ CUcontext iree_hal_cuda_device_context(iree_hal_device_t* base_device) {
   return device->cu_context;
 }
 
+CUdevice iree_hal_cuda_device_get_cudevice(iree_hal_device_t* base_device) {
+  iree_hal_cuda_device_t* device =
+      iree_hal_cuda_device_cast_unsafe(base_device);
+  return device->cu_device;
+}
+
 const iree_hal_cuda_dynamic_symbols_t* iree_hal_cuda_device_dynamic_symbols(
     iree_hal_device_t* base_device) {
   iree_hal_cuda_device_t* device =
@@ -442,6 +449,8 @@ static iree_status_t iree_hal_cuda_device_query_i64(
 static iree_status_t iree_hal_cuda_device_create_channel(
     iree_hal_device_t* base_device, iree_hal_queue_affinity_t queue_affinity,
     iree_hal_channel_params_t params, iree_hal_channel_t** out_channel) {
+  return iree_ok_status();
+  
   iree_hal_cuda_device_t* device = iree_hal_cuda_device_cast(base_device);
   if (!device->nccl_symbols || !device->nccl_symbols->dylib) {
     return iree_make_status(

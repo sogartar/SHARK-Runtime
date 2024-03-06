@@ -222,13 +222,25 @@ iree_status_t iree_hal_cuda_buffer_format(
     ", "
     "host_ptr = %p, "
     "device_ptr = 0x%llx, "
+    "allocated_buffer = %p, "
+    "allocation_size = %zu, "
+    "byte_offset = %zu, "
+    "byte_length = %zu, "
+    "host_allocator.self = %p, "
+    "device_allocator = %p, "
     "memory_type = %.*s, "
     "allowed_access = %.*s, "
-    "allowed_usage = %.*s, ",
+    "allowed_usage = %.*s, "
+    "flags = 0x%hx",
     cuda_buffer->host_ptr, cuda_buffer->device_ptr,
+    buffer->allocated_buffer,
+    buffer->allocation_size, buffer->byte_offset, buffer->byte_length,
+    buffer->host_allocator.self,
+    buffer->device_allocator,
     (int)memory_type.size, memory_type.data,
     (int)allowed_access.size, allowed_access.data,
-    (int)allowed_usage.size, allowed_usage.data);
+    (int)allowed_usage.size, allowed_usage.data,
+    buffer->flags);
 }
 
 static const iree_hal_buffer_vtable_t iree_hal_cuda_buffer_vtable = {

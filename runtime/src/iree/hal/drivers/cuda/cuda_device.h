@@ -40,6 +40,8 @@ iree_status_t iree_hal_cuda_device_create_stream_command_buffer(
 // contexts and the context may be in use on other threads.
 CUcontext iree_hal_cuda_device_context(iree_hal_device_t* device);
 
+CUdevice iree_hal_cuda_device_get_cudevice(iree_hal_device_t* device);
+
 // Returns the dynamic symbol table from the |device| if it is a CUDA device
 // and otherwise returns NULL.
 //
