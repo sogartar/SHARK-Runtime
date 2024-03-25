@@ -649,8 +649,8 @@ static iree_status_t iree_hal_hip_device_queue_write(
 }
 
 static void iree_hal_hip_device_collect_tracing_context(void* user_data) {
-  iree_hal_hip_tracing_context_collect(
-      (iree_hal_hip_tracing_context_t*)user_data);
+  // iree_hal_hip_tracing_context_collect(
+  //     (iree_hal_hip_tracing_context_t*)user_data);
 }
 
 static iree_status_t iree_hal_hip_device_queue_execute(

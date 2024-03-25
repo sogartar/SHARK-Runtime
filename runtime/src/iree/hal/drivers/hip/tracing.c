@@ -169,6 +169,8 @@ void iree_hal_hip_tracing_context_free(
   IREE_TRACE_ZONE_END(z0);
 }
 
+#include <unistd.h>
+
 void iree_hal_hip_tracing_context_collect(
     iree_hal_hip_tracing_context_t* context) {
   if (!context) return;
@@ -177,6 +179,8 @@ void iree_hal_hip_tracing_context_collect(
     return;
   }
   IREE_TRACE_ZONE_BEGIN(z0);
+
+  sleep(1);
 
   while (context->query_tail != context->query_head) {
     // Compute the contiguous range of queries ready to be read.
