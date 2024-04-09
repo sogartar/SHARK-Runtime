@@ -221,7 +221,7 @@ void iree_hal_hip_tracing_context_collect(
   IREE_TRACE_ZONE_END(z0);
 }
 
-static uint16_t iree_hal_hip_tracing_context_insert_query(
+static uint16_t iree_hal_hip_stream_tracing_context_insert_query(
     iree_hal_hip_tracing_context_t* context, hipStream_t stream) {
   // Allocate an event from the pool for use by the query.
   uint32_t query_id = context->query_head;
@@ -272,29 +272,23 @@ static uint16_t iree_hal_hip_graph_tracing_context_insert_query(
 // many cases we could reduce this by inserting events only between zones and
 // using the differences between them.
 
-void iree_hal_hip_tracing_zone_begin_impl(
+void iree_hal_hip_stream_tracing_zone_begin_impl(
     iree_hal_hip_tracing_context_t* context, hipStream_t stream,
     const iree_tracing_location_t* src_loc) {
-  if (!context) {
-    IREE_ASSERT(false, "Context is NULL.");
-    return;
-  }
+  IREE_ASSERT_ARGUMENT(context);
   uint16_t query_id =
-      iree_hal_hip_tracing_context_insert_query(context, stream);
+      iree_hal_hip_stream_tracing_context_insert_query(context, stream);
   iree_tracing_gpu_zone_begin(context->id, query_id, src_loc);
 }
 
-void iree_hal_hip_tracing_zone_begin_external_impl(
+void iree_hal_hip_stream_tracing_zone_begin_external_impl(
     iree_hal_hip_tracing_context_t* context, hipStream_t stream,
     const char* file_name, size_t file_name_length, uint32_t line,
     const char* function_name, size_t function_name_length, const char* name,
     size_t name_length) {
-  if (!context) {
-    IREE_ASSERT(false, "Context is NULL.");
-    return;
-  }
+  IREE_ASSERT_ARGUMENT(context);
   uint16_t query_id =
-      iree_hal_hip_tracing_context_insert_query(context, stream);
+      iree_hal_hip_stream_tracing_context_insert_query(context, stream);
   iree_tracing_gpu_zone_begin_external(context->id, query_id, file_name,
                                        file_name_length, line, function_name,
                                        function_name_length, name, name_length);
@@ -314,11 +308,11 @@ void iree_hal_hip_graph_tracing_zone_begin_external_impl(
                                        function_name_length, name, name_length);
 }
 
-void iree_hal_hip_tracing_zone_end_impl(iree_hal_hip_tracing_context_t* context,
-                                        hipStream_t stream) {
+void iree_hal_hip_stream_tracing_zone_end_impl(
+    iree_hal_hip_tracing_context_t* context, hipStream_t stream) {
   if (!context) return;
   uint16_t query_id =
-      iree_hal_hip_tracing_context_insert_query(context, stream);
+      iree_hal_hip_stream_tracing_context_insert_query(context, stream);
   iree_tracing_gpu_zone_end(context->id, query_id);
 }
 

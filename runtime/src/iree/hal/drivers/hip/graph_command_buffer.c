@@ -11,7 +11,6 @@
 #include <stdint.h>
 
 #include "iree/base/api.h"
-#include "iree/base/attributes.h"
 #include "iree/hal/drivers/hip/dynamic_symbols.h"
 #include "iree/hal/drivers/hip/hip_buffer.h"
 #include "iree/hal/drivers/hip/native_executable.h"
@@ -117,8 +116,8 @@ static void iree_hip_graph_command_buffer_trace_zone_end(
   hipGraphNode_t* tracing_event_node =
       &command_buffer->hip_graph_nodes[command_buffer->graph_node_count++];
   size_t dependency_count = command_buffer->hip_barrier_node ? 1 : 0;
-  IREE_ASSERT(dependency_count > 0 &&
-              "Ending a zone should at least depend on the beginning.");
+  IREE_ASSERT_GT(dependency_count, 0,
+                 "Ending a zone should at least depend on the beginning.");
   IREE_HIP_GRAPH_TRACE_ZONE_END(command_buffer->tracing_context,
                                 tracing_event_node, command_buffer->hip_graph,
                                 &command_buffer->hip_barrier_node,
@@ -358,12 +357,12 @@ static iree_status_t iree_hal_hip_graph_command_buffer_execution_barrier(
       iree_hal_hip_graph_command_buffer_cast(base_command_buffer);
   IREE_TRACE_ZONE_BEGIN(z0);
 
-  IREE_RETURN_AND_END_ZONE_IF_ERROR(
-      z0, iree_hal_hip_graph_command_buffer_execution_barrier_internal(
-              command_buffer));
+  iree_status_t status =
+      iree_hal_hip_graph_command_buffer_execution_barrier_internal(
+          command_buffer);
 
   IREE_TRACE_ZONE_END(z0);
-  return iree_ok_status();
+  return status;
 }
 
 static iree_status_t iree_hal_hip_graph_command_buffer_signal_event(

@@ -65,13 +65,13 @@ void iree_hal_hip_tracing_context_collect(
 
 // Begins a normal zone derived on the calling |src_loc|.
 // Must be perfectly nested and paired with a corresponding zone end.
-void iree_hal_hip_tracing_zone_begin_impl(
+void iree_hal_hip_stream_tracing_zone_begin_impl(
     iree_hal_hip_tracing_context_t* context, hipStream_t stream,
     const iree_tracing_location_t* src_loc);
 
 // Begins an external zone using the given source information.
 // The provided strings will be copied into the tracy buffer.
-void iree_hal_hip_tracing_zone_begin_external_impl(
+void iree_hal_hip_stream_tracing_zone_begin_external_impl(
     iree_hal_hip_tracing_context_t* context, hipStream_t stream,
     const char* file_name, size_t file_name_length, uint32_t line,
     const char* function_name, size_t function_name_length, const char* name,
@@ -83,8 +83,8 @@ void iree_hal_hip_graph_tracing_zone_begin_external_impl(
     size_t file_name_length, uint32_t line, const char* function_name,
     size_t function_name_length, const char* name, size_t name_length);
 
-void iree_hal_hip_tracing_zone_end_impl(iree_hal_hip_tracing_context_t* context,
-                                        hipStream_t stream);
+void iree_hal_hip_stream_tracing_zone_end_impl(
+    iree_hal_hip_tracing_context_t* context, hipStream_t stream);
 void iree_hal_hip_graph_tracing_zone_end_impl(
     iree_hal_hip_tracing_context_t* context, hipGraphNode_t* out_node,
     hipGraph_t graph, hipGraphNode_t* dependency_nodes,
@@ -95,7 +95,7 @@ void iree_hal_hip_graph_tracing_zone_end_impl(
   static const iree_tracing_location_t TracyConcat(                       \
       __tracy_source_location, __LINE__) = {NULL, __FUNCTION__, __FILE__, \
                                             (uint32_t)__LINE__, 0};       \
-  iree_hal_hip_tracing_zone_begin_impl(                                   \
+  iree_hal_hip_stream_tracing_zone_begin_impl(                            \
       context, stream, &TracyConcat(__tracy_source_location, __LINE__));
 
 // Begins an externally defined zone with a dynamic source location.
@@ -104,7 +104,7 @@ void iree_hal_hip_graph_tracing_zone_end_impl(
 #define IREE_HIP_STREAM_TRACE_ZONE_BEGIN_EXTERNAL(                       \
     context, stream, file_name, file_name_length, line, function_name,   \
     function_name_length, name, name_length)                             \
-  iree_hal_hip_tracing_zone_begin_external_impl(                         \
+  iree_hal_hip_stream_tracing_zone_begin_external_impl(                  \
       context, stream, file_name, file_name_length, line, function_name, \
       function_name_length, name, name_length)
 #define IREE_HIP_GRAPH_TRACE_ZONE_BEGIN_EXTERNAL(                             \
@@ -117,7 +117,7 @@ void iree_hal_hip_graph_tracing_zone_end_impl(
       name, name_length)
 
 #define IREE_HIP_STREAM_TRACE_ZONE_END(context, stream) \
-  iree_hal_hip_tracing_zone_end_impl(context, stream)
+  iree_hal_hip_stream_tracing_zone_end_impl(context, stream)
 #define IREE_HIP_GRAPH_TRACE_ZONE_END(                                  \
     context, out_node, graph, dependency_nodes, dependency_nodes_count) \
   iree_hal_hip_graph_tracing_zone_end_impl(                             \
