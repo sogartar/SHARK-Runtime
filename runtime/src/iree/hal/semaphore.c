@@ -152,6 +152,30 @@ iree_hal_semaphore_list_signal(iree_hal_semaphore_list_t semaphore_list) {
   return status;
 }
 
+IREE_API_EXPORT void iree_hal_semaphore_list_swap_elements(
+    iree_hal_semaphore_list_t* semaphore_list, iree_host_size_t i,
+    iree_host_size_t j) {
+  if (IREE_UNLIKELY(i == j)) {
+    return;
+  }
+
+  iree_hal_semaphore_t* tmp_semaphore = semaphore_list->semaphores[i];
+  uint64_t tmp_payload_value = semaphore_list->payload_values[i];
+
+  semaphore_list->semaphores[i] = semaphore_list->semaphores[j];
+  semaphore_list->payload_values[i] = semaphore_list->payload_values[j];
+
+  semaphore_list->semaphores[j] = tmp_semaphore;
+  semaphore_list->payload_values[j] = tmp_payload_value;
+}
+
+IREE_API_EXPORT void iree_hal_semaphore_list_remove_element(
+    iree_hal_semaphore_list_t* semaphore_list, iree_host_size_t i) {
+  iree_hal_semaphore_list_swap_elements(semaphore_list, i,
+                                        semaphore_list->count - 1);
+  --semaphore_list->count;
+}
+
 IREE_API_EXPORT void iree_hal_semaphore_list_fail(
     iree_hal_semaphore_list_t semaphore_list, iree_status_t signal_status) {
   IREE_TRACE_ZONE_BEGIN(z0);
