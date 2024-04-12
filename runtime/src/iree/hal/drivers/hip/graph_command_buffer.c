@@ -117,7 +117,7 @@ static void iree_hip_graph_command_buffer_trace_zone_end(
       &command_buffer->hip_graph_nodes[command_buffer->graph_node_count++];
   size_t dependency_count = command_buffer->hip_barrier_node ? 1 : 0;
   IREE_ASSERT_GT(dependency_count, 0,
-                 "Ending a zone should at least depend on the beginning.");
+                 "ending a zone should at least depend on the beginning");
   IREE_HIP_GRAPH_TRACE_ZONE_END(command_buffer->tracing_context,
                                 tracing_event_node, command_buffer->hip_graph,
                                 &command_buffer->hip_barrier_node,
