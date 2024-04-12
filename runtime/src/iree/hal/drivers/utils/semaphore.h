@@ -14,7 +14,7 @@
 extern "C" {
 #endif  // __cplusplus
 
-extern inline void iree_hal_semaphore_list_swap_elements(
+static inline void iree_hal_semaphore_list_swap_elements(
     iree_hal_semaphore_list_t* semaphore_list, iree_host_size_t i,
     iree_host_size_t j) {
   IREE_ASSERT(i >= 0 && i < semaphore_list->count);
@@ -35,7 +35,7 @@ extern inline void iree_hal_semaphore_list_swap_elements(
 }
 
 // Swap i-th element with the last and then remove the last.
-extern inline void iree_hal_semaphore_list_remove_element(
+static inline void iree_hal_semaphore_list_remove_element(
     iree_hal_semaphore_list_t* semaphore_list, iree_host_size_t i) {
   iree_hal_semaphore_list_swap_elements(semaphore_list, i,
                                         semaphore_list->count - 1);
