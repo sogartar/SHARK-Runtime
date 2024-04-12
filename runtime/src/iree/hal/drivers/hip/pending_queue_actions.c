@@ -754,11 +754,11 @@ iree_status_t iree_hal_hip_pending_queue_actions_issue(
         // Try to acquire a HIP event from an existing device signal timepoint.
         // If so, we can use that event to wait on the device.
         // Otherwise, this action is still not ready for execution.
-        // A HIP event can not be waited on before it is scheduled for
-        // recording.
-        // If not schedule yet, it is as if already occurred.
-        // We can't schedule an event recording because the semaphore is not
-        // signaled yet and we don't know when it may be signaled.
+        // Before issuing recording on a stream, an event represents an empty
+        // set of work so waiting on it will just return success.
+        // Here we must guarantee the HIP event is indeed recorded, which means
+        // it's associated with some already present device signal timepoint on
+        // the semaphore timeline.
         iree_hal_hip_event_t* wait_event = NULL;
         if (!iree_hal_hip_semaphore_acquire_event_host_wait(
                 semaphores[i], values[i], &wait_event)) {
