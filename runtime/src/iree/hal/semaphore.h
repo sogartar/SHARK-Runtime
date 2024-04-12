@@ -162,14 +162,6 @@ static inline iree_hal_semaphore_list_t iree_hal_semaphore_list_empty(void) {
 IREE_API_EXPORT iree_status_t
 iree_hal_semaphore_list_signal(iree_hal_semaphore_list_t semaphore_list);
 
-IREE_API_EXPORT void iree_hal_semaphore_list_swap_elements(
-    iree_hal_semaphore_list_t* semaphore_list, iree_host_size_t i,
-    iree_host_size_t j);
-
-// Swap i-th element with the last and then remove the last.
-IREE_API_EXPORT void iree_hal_semaphore_list_remove_element(
-    iree_hal_semaphore_list_t* semaphore_list, iree_host_size_t i);
-
 // Signals each semaphore in |semaphore_list| to indicate failure with
 // |signal_status|.
 IREE_API_EXPORT void iree_hal_semaphore_list_fail(

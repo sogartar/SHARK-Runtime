@@ -48,7 +48,7 @@ iree_status_t iree_hal_hip_event_semaphore_acquire_timepoint_device_signal(
 // returns false otherwise.
 // The caller should release the |out_event| once done.
 bool iree_hal_hip_semaphore_acquire_event_host_wait(
-    iree_hal_semaphore_t* semaphore, uint64_t min_value,
+    iree_hal_semaphore_t* base_semaphore, uint64_t min_value,
     iree_hal_hip_event_t** out_event);
 
 // Performs a multi-wait on one or more semaphores. Returns

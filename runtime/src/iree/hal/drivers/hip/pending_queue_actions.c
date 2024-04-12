@@ -22,6 +22,7 @@
 #include "iree/hal/drivers/hip/graph_command_buffer.h"
 #include "iree/hal/drivers/hip/hip_device.h"
 #include "iree/hal/drivers/hip/status_util.h"
+#include "iree/hal/drivers/utils/semaphore.h"
 #include "iree/hal/utils/deferred_command_buffer.h"
 #include "iree/hal/utils/resource_set.h"
 
@@ -750,9 +751,14 @@ iree_status_t iree_hal_hip_pending_queue_actions_issue(
           continue;
         }
 
-        // Try to acquire a HIP event from an existing device wait timepoint.
+        // Try to acquire a HIP event from an existing device signal timepoint.
         // If so, we can use that event to wait on the device.
         // Otherwise, this action is still not ready for execution.
+        // A HIP event can not be waited on before it is scheduled for
+        // recording.
+        // If not schedule yet, it is as if already occurred.
+        // We can't schedule an event recording because the semaphore is not
+        // signaled yet and we don't know when it may be signaled.
         iree_hal_hip_event_t* wait_event = NULL;
         if (!iree_hal_hip_semaphore_acquire_event_host_wait(
                 semaphores[i], values[i], &wait_event)) {
