@@ -127,6 +127,8 @@ static iree_status_t iree_hal_hip_semaphore_signal(
       iree_hal_hip_semaphore_cast(base_semaphore);
   IREE_TRACE_ZONE_BEGIN(z0);
 
+  printf("Signaling Semaphore %p to value %ld\n", semaphore, new_value);
+
   iree_slim_mutex_lock(&semaphore->mutex);
 
   if (new_value <= semaphore->current_value) {
@@ -146,6 +148,7 @@ static iree_status_t iree_hal_hip_semaphore_signal(
 
   // Notify timepoints - note that this must happen outside the lock.
   iree_hal_semaphore_notify(&semaphore->base, new_value, IREE_STATUS_OK);
+  printf("Semaphore %p signaled to value %ld\n", semaphore, new_value);
 
   // Advance the pending queue actions if possible. This also must happen
   // outside the lock to avoid nesting.
@@ -261,6 +264,12 @@ static iree_status_t iree_hal_hip_semaphore_wait(
   IREE_TRACE_ZONE_BEGIN(z0);
 
   iree_slim_mutex_lock(&semaphore->mutex);
+
+  printf(
+      "iree_hal_hip_semaphore_wait start waiting on semaphore %p for value "
+      "%ld. Current value %ld\n",
+      semaphore, value, semaphore->current_value);
+
   if (!iree_status_is_ok(semaphore->failure_status)) {
     // Fastest path: failed; return an error to tell callers to query for it.
     iree_slim_mutex_unlock(&semaphore->mutex);

@@ -75,6 +75,8 @@ IREE_API_EXPORT iree_status_t iree_hal_semaphore_wait(
   IREE_TRACE_ZONE_APPEND_VALUE_I64(z0, value);
   iree_status_t status =
       _VTABLE_DISPATCH(semaphore, wait)(semaphore, value, timeout);
+  printf("iree_hal_semaphore_wait done waiting on semaphore %p for value %ld\n",
+         semaphore, value);
   IREE_TRACE_ZONE_END(z0);
   return status;
 }

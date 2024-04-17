@@ -453,6 +453,7 @@ TEST_P(semaphore_submission_test,
 // Test device -> device synchronization: submit two batches with a
 // semaphore signal -> wait dependency.
 TEST_P(semaphore_submission_test, IntermediateSemaphoreBetweenDeviceBatches) {
+  printf("IntermediateSemaphoreBetweenDeviceBatches test started\n");
   // The signaling relationship is
   // command_buffer1 -> semaphore1 -> command_buffer2 -> semaphore2
 
@@ -478,6 +479,7 @@ TEST_P(semaphore_submission_test, IntermediateSemaphoreBetweenDeviceBatches) {
   // start executing command_buffer2.
   iree_hal_semaphore_t* semaphore1 = NULL;
   IREE_ASSERT_OK(iree_hal_semaphore_create(device_, 0, &semaphore1));
+  printf("semaphore1 = %p\n", semaphore1);
   uint64_t semaphore1_value = 1;
   iree_hal_semaphore_list_t semaphore1_list = {/*count=*/1, &semaphore1,
                                                &semaphore1_value};
@@ -485,6 +487,7 @@ TEST_P(semaphore_submission_test, IntermediateSemaphoreBetweenDeviceBatches) {
   // Semaphore to signal when all work (command_buffer2) is done.
   iree_hal_semaphore_t* semaphore2 = NULL;
   IREE_ASSERT_OK(iree_hal_semaphore_create(device_, 0, &semaphore2));
+  printf("semaphore2 = %p\n", semaphore2);
   uint64_t semaphore2_value = 1;
   iree_hal_semaphore_list_t semaphore2_list = {/*count=*/1, &semaphore2,
                                                &semaphore2_value};

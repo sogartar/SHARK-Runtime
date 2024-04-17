@@ -570,6 +570,7 @@ static void iree_hal_hip_execution_device_signal_host_callback(
   // This will internally try to release more workload to the GPU.
   IREE_IGNORE_ERROR(
       iree_hal_semaphore_list_signal(action->signal_semaphore_list));
+  printf("Action %p done.\n", action);
 
   IREE_TRACE_ZONE_END(z0);
 }
