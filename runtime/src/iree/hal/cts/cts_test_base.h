@@ -11,6 +11,7 @@
 #include <string>
 
 #include "iree/base/api.h"
+#include "iree/base/status.h"
 #include "iree/base/string_view.h"
 #include "iree/hal/api.h"
 #include "iree/testing/gtest.h"
@@ -36,7 +37,12 @@ iree_const_byte_span_t get_test_executable_data(iree_string_view_t file_name);
 class CtsTestBase : public ::testing::TestWithParam<std::string> {
  protected:
   static void SetUpTestSuite() {
-    IREE_CHECK_OK(register_test_driver(iree_hal_driver_registry_default()));
+    iree_status_t status =
+        register_test_driver(iree_hal_driver_registry_default());
+    if (iree_status_is_already_exists(status)) {
+      return;
+    }
+    IREE_CHECK_OK(status);
   }
 
   virtual void SetUp() {
