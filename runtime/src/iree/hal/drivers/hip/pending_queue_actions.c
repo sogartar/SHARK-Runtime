@@ -10,7 +10,6 @@
 #include <stddef.h>
 
 #include "iree/base/api.h"
-#include "iree/base/assert.h"
 #include "iree/base/internal/arena.h"
 #include "iree/base/internal/atomic_slist.h"
 #include "iree/base/internal/atomics.h"
@@ -143,21 +142,6 @@ static void iree_hal_hip_queue_action_list_push_back(
   list->tail = action;
 }
 
-// static iree_hal_hip_queue_action_t* iree_hal_hip_queue_action_list_pop_front(
-//     iree_hal_hip_queue_action_list_t* list) {
-//   IREE_ASSERT(list->head);
-
-//   iree_hal_hip_queue_action_t* action = list->head;
-//   if (action->next) {
-//     action->next->prev = NULL;
-//   } else {
-//     list->tail = NULL;
-//   }
-//   list->head = action->next;
-
-//   return action;
-// }
-
 // Erases |action| from |list|.
 static void iree_hal_hip_queue_action_list_erase(
     iree_hal_hip_queue_action_list_t* list,
@@ -195,16 +179,6 @@ static void iree_hal_hip_queue_action_list_destroy(
     iree_hal_hip_queue_action_t* next_action = head_action->next;
     iree_hal_hip_queue_action_destroy(head_action);
     head_action = next_action;
-  }
-}
-
-// Frees all actions in the given |list|.
-static void iree_hal_hip_queue_action_list_free_actions(
-    iree_allocator_t host_allocator, iree_hal_hip_queue_action_list_t* list) {
-  for (iree_hal_hip_queue_action_t* action = list->head; action != NULL;) {
-    iree_hal_hip_queue_action_t* next_action = action->next;
-    iree_allocator_free(host_allocator, action);
-    action = next_action;
   }
 }
 
@@ -671,6 +645,7 @@ static void iree_hal_hip_execution_device_signal_host_callback(
   // may run while we are still using the semaphore list, causing a crash.
   status = iree_hal_semaphore_list_signal(action->signal_semaphore_list);
   if (IREE_UNLIKELY(!iree_status_is_ok(status))) {
+    IREE_ASSERT(false && "can't signal semaphores");
     iree_hal_hip_post_error_to_worker_state(&actions->working_area,
                                             iree_status_code(status));
   }
@@ -687,6 +662,7 @@ static void iree_hal_hip_execution_device_signal_host_callback(
   // We need to trigger execution of this action again, so it gets cleaned up.
   status = iree_hal_hip_pending_queue_actions_issue(actions);
   if (IREE_UNLIKELY(!iree_status_is_ok(status))) {
+    IREE_ASSERT(false && "can't issue pending actions");
     iree_hal_hip_post_error_to_worker_state(&actions->working_area,
                                             iree_status_code(status));
   }
@@ -852,7 +828,6 @@ iree_status_t iree_hal_hip_pending_queue_actions_issue(
     iree_hal_semaphore_t** semaphores = action->wait_semaphore_list.semaphores;
     uint64_t* values = action->wait_semaphore_list.payload_values;
 
-    action->event_count = 0;
     action->is_pending = false;
 
     // Cleanup actions are immediately ready to release. Otherwise, look at all
@@ -885,8 +860,6 @@ iree_status_t iree_hal_hip_pending_queue_actions_issue(
         iree_hal_hip_event_t* wait_event = NULL;
         if (!iree_hal_hip_semaphore_acquire_event_host_wait(
                 semaphores[i], values[i], &wait_event)) {
-          // Clear the scratch fields.
-          action->event_count = 0;
           action->is_pending = true;
           break;
         }
@@ -919,9 +892,8 @@ iree_status_t iree_hal_hip_pending_queue_actions_issue(
   }
 
   if (IREE_UNLIKELY(!iree_status_is_ok(status))) {
-    // Some error happened during processing the current action. Clear the
-    // scratch fields and put it back to the pending list so we don't leak.
-    action->event_count = 0;
+    // Some error happened during processing the current action.
+    // Put it back to the pending list so we don't leak.
     action->is_pending = true;
     iree_hal_hip_queue_action_list_push_back(&pending_list, action);
   }
@@ -945,9 +917,6 @@ iree_status_t iree_hal_hip_pending_queue_actions_issue(
   }
 
   if (IREE_UNLIKELY(!iree_status_is_ok(status))) {
-    // Release all actions in the ready list to avoid leaking.
-    iree_hal_hip_queue_action_list_destroy(ready_list.head);
-    iree_allocator_free(actions->host_allocator, entry);
     IREE_TRACE_ZONE_END(z0);
     return status;
   }
@@ -1016,25 +985,24 @@ static iree_status_t iree_hal_hip_worker_process_ready_list(
 
     // Process the current batch of ready actions.
     while (entry->ready_list_head) {
-      iree_hal_hip_queue_action_t* action = entry->ready_list_head;
+      iree_hal_hip_queue_action_t* action =
+          iree_hal_hip_atomic_slist_entry_pop_front(entry);
 
       switch (action->state) {
         case IREE_HAL_HIP_QUEUE_ACTION_STATE_ALIVE:
           status = iree_hal_hip_pending_queue_actions_issue_execution(action);
-          if (iree_status_is_ok(status)) {
-            action->event_count = 0;
-            iree_hal_hip_atomic_slist_entry_pop_front(entry);
+          if (IREE_UNLIKELY(!iree_status_is_ok(status))) {
+            iree_hal_hip_queue_action_destroy(action);
           }
           break;
         case IREE_HAL_HIP_QUEUE_ACTION_STATE_ZOMBIE:
-          iree_hal_hip_atomic_slist_entry_pop_front(entry);
           iree_hal_hip_pending_queue_actions_issue_cleanup(action);
           break;
       }
-      if (!iree_status_is_ok(status)) break;
+      if (IREE_UNLIKELY(!iree_status_is_ok(status))) break;
     }
 
-    if (!iree_status_is_ok(status)) {
+    if (IREE_UNLIKELY(!iree_status_is_ok(status))) {
       // Let common destruction path take care of destroying the worklist.
       // When we know all host stream callbacks are done and not touching
       // anything.
@@ -1051,7 +1019,12 @@ static iree_status_t iree_hal_hip_worker_process_ready_list(
 
 static bool iree_hal_hip_worker_has_no_pending_host_stream_callbacks(
     iree_hal_hip_working_area_t* working_area) {
-  return working_area->host_stream_pending_callbacks_count == 0;
+  iree_slim_mutex_lock(
+      &working_area->host_stream_pending_callbacks_count_mutex);
+  bool result = (working_area->host_stream_pending_callbacks_count == 0);
+  iree_slim_mutex_unlock(
+      &working_area->host_stream_pending_callbacks_count_mutex);
+  return result;
 }
 
 // Wait for all host stream callbacks to finish.

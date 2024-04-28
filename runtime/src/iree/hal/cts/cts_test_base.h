@@ -11,7 +11,6 @@
 #include <string>
 
 #include "iree/base/api.h"
-#include "iree/base/status.h"
 #include "iree/base/string_view.h"
 #include "iree/hal/api.h"
 #include "iree/testing/gtest.h"
