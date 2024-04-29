@@ -252,9 +252,11 @@ typedef struct iree_hal_hip_working_area_t {
   // Notification from the parent thread to request worker state changes.
   iree_notification_t state_notification;
   // Notification to the parent thread to indicate the worker committed exiting.
+  // TODO: maybe remove this. We can just wait on the worker thread to exit.
   iree_notification_t exit_notification;
   iree_hal_hip_ready_action_slist_t ready_worklist;  // atomic
   iree_atomic_int32_t worker_state;                  // atomic
+  // TODO: use status to provide more context for the error.
   iree_atomic_intptr_t error_code;                   // atomic
   // The number of actions that have been issued to the GPU but not yet fully
   // completed both execution and cleanup. We don't need this field to be atomic
