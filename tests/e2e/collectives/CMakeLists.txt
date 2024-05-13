@@ -6,7 +6,7 @@
 
 # These tests perform linking via the Compiler API, which is only supported
 # in bundled-LLVM builds at the moment (#14086).
-if(NOT IREE_BUILD_BUNDLED_LLVM OR NOT IREE_ENABLE_COLLECTIVE_RUNTIME_TESTS)
+if(NOT IREE_BUILD_BUNDLED_LLVM)
   return()
 endif()
 
@@ -48,6 +48,7 @@ if(IREE_TARGET_BACKEND_CUDA AND IREE_HAL_DRIVER_CUDA)
       # The NCCL collectives backend requires 1 GPU per rank.
       # To properly test for 2 ranks we need 2 GPUs.
       "requires-multiple-devices"
+      "requires-2-devices"
   )
 
   iree_py_test(
@@ -61,6 +62,7 @@ if(IREE_TARGET_BACKEND_CUDA AND IREE_HAL_DRIVER_CUDA)
     LABELS
       ${COMMON_LABELS}
       "requires-multiple-devices"
+      "requires-4-devices"
   )
 endif()
 
@@ -98,9 +100,10 @@ if(IREE_TARGET_BACKEND_ROCM AND IREE_HAL_DRIVER_HIP AND IREE_HIP_TEST_TARGET_CHI
       ${COMMON_ARGS}
     LABELS
       ${COMMON_LABELS}
-      # The NCCL collectives backend requires 1 GPU per rank.
+      # The RCCL collectives backend requires 1 GPU per rank.
       # To properly test for 2 ranks we need 2 GPUs.
       "requires-multiple-devices"
+      "requires-2-devices"
   )
 
   iree_py_test(
@@ -114,5 +117,6 @@ if(IREE_TARGET_BACKEND_ROCM AND IREE_HAL_DRIVER_HIP AND IREE_HIP_TEST_TARGET_CHI
     LABELS
       ${COMMON_LABELS}
       "requires-multiple-devices"
+      "requires-4-devices"
   )
 endif()

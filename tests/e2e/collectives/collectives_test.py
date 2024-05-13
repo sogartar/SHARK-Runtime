@@ -16,6 +16,7 @@ import numpy as np
 import tempfile
 import subprocess
 import test_utils
+import multiprocessing
 
 ArrayLike = object
 
@@ -26,6 +27,49 @@ def parse_args():
     parser.add_argument("--driver", type=str, default="local-task")
     parser.add_argument("--iree_compiler_args", type=str, default="")
     return parser.parse_known_args()
+
+
+def get_device_count(driver: str) -> int:
+    available_driver_names = iree.runtime.query_available_drivers()
+    if driver not in available_driver_names:
+        return 0
+    try:
+        hal_driver = iree.runtime.get_driver(driver)
+    except iree.runtime.ErrorUnavailable:
+        # If the driver is unavailable we do not consider it a hard error.
+        # It means there are no devices associated with that driver.
+        return 0
+    except:
+        raise
+
+    device_infos = hal_driver.query_available_devices()
+    return len(device_infos)
+
+
+def get_device_count_inplace(driver: str, queue: multiprocessing.Queue) -> None:
+    device_count = get_device_count(driver)
+    queue.put(device_count)
+
+
+def get_device_count_in_subprocess(driver: str) -> int:
+    queue = multiprocessing.Queue()
+    process = multiprocessing.Process(
+        target=get_device_count_inplace, args=[driver, queue]
+    )
+    process.start()
+    process.join()
+    assert process.exitcode == 0
+    return queue.get()
+
+
+def has_needed_device_count(driver: str, shard_count: int) -> bool:
+    # Run in a subprocess to avoid initializing the driver context in this
+    # process as it may interfere when other subprocesses need it.
+    device_count = get_device_count_in_subprocess(driver)
+    # No support for other drivers.
+    if driver not in ["cuda", "hip"]:
+        return False
+    return device_count >= shard_count
 
 
 def prepare_shards_io_files(
@@ -124,7 +168,20 @@ def run_test(
             )
 
 
-class SingleRank(unittest.TestCase):
+class TestCase(unittest.TestCase):
+    def setUp(self):
+        if not has_needed_device_count(args.driver, self.shard_count):
+            raise unittest.SkipTest(
+                (
+                    f'Skipping tests for driver "{args.driver}". '
+                    "Could not find needed number of devices."
+                )
+            )
+
+
+class SingleRank(TestCase):
+    shard_count: int = 1
+
     def test_stablehlo_all_reduce(self):
         """
         Test trivial case of all_reduce with one rank.
