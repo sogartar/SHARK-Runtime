@@ -668,7 +668,7 @@ static void iree_hal_hip_execution_device_signal_host_callback(
   // We need to trigger execution of this action again, so it gets cleaned up.
   status = iree_hal_hip_pending_queue_actions_issue(actions);
   if (IREE_UNLIKELY(!iree_status_is_ok(status))) {
-    IREE_ASSERT(false && "can't issue pending actions");
+    IREE_ASSERT(false && "cannot issue action for cleanup in host callback");
     iree_hal_hip_post_error_to_worker_state(&actions->working_area,
                                             iree_status_code(status));
   }
