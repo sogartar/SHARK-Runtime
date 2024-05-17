@@ -22,11 +22,17 @@ ArrayLike = object
 
 
 def parse_args():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--target_backend", type=str, default="llvm-cpu")
     parser.add_argument("--driver", type=str, default="local-task")
     parser.add_argument("--iree_compiler_args", type=str, default="")
-    return parser.parse_known_args()
+    parser.add_argument("-h,", "--help", action="store_true", default=False)
+    args, remaining_args = parser.parse_known_args()
+    if args.help:
+        # Let also unittest print its help.
+        remaining_args += ["--help"]
+        parser.print_help()
+    return args, remaining_args
 
 
 def get_device_count(driver: str) -> int:
@@ -169,6 +175,8 @@ def run_test(
 
 
 class TestCase(unittest.TestCase):
+    shard_count: int = None
+
     def setUp(self):
         if not has_needed_device_count(args.driver, self.shard_count):
             raise unittest.SkipTest(
@@ -257,7 +265,9 @@ class SingleRank(TestCase):
         )
 
 
-class TwoRanks(unittest.TestCase):
+class TwoRanks(TestCase):
+    shard_count: int = 2
+
     def test_stablehlo_all_reduce(self):
         """
         Test all_reduce([1, 2, 3, 4], [5, 6, 7, 8]) == [6, 8, 10, 12].
@@ -333,7 +343,9 @@ class TwoRanks(unittest.TestCase):
         )
 
 
-class FourRanks(unittest.TestCase):
+class FourRanks(TestCase):
+    shard_count: int = 4
+
     def test_mesh_all_reduce_on_2d_mesh_along_axis_1(self):
         """
         Test on a 2x2 device mesh reduction along dimension 1.
