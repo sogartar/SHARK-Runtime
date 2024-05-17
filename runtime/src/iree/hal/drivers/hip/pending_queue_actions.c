@@ -111,7 +111,8 @@ static void iree_hal_hip_queue_action_clear_events(
   action->event_count = 0;
 }
 
-void iree_hal_hip_queue_action_destroy(iree_hal_hip_queue_action_t* action);
+static void iree_hal_hip_queue_action_destroy(
+    iree_hal_hip_queue_action_t* action);
 
 //===----------------------------------------------------------------------===//
 // Queue action list
@@ -215,9 +216,8 @@ static iree_hal_hip_queue_action_t* iree_hal_hip_atomic_slist_entry_pop_front(
   IREE_ASSERT(list->ready_list_head);
 
   iree_hal_hip_queue_action_t* action = list->ready_list_head;
-  if (action->next) {
-    action->next->prev = NULL;
-  }
+  if (action->next) action->next->prev = NULL;
+  action->next = NULL;
   list->ready_list_head = action->next;
 
   return action;
@@ -263,6 +263,9 @@ typedef struct iree_hal_hip_working_area_t {
   // given it is modified only from the worker thread.
   int32_t pending_action_count;
 
+  // The number of HIP stream callbacks that are currently scheduled for
+  // execution on the hot stream.
+  // We need to wait for them to finish before destrying the context.
   iree_slim_mutex_t host_stream_pending_callbacks_count_mutex;
   iree_notification_t host_stream_pending_callbacks_count_notification;
   int32_t host_stream_pending_callbacks_count
@@ -484,7 +487,8 @@ static void iree_hal_hip_free_semaphore_list(
   iree_allocator_free(host_allocator, semaphore_list->payload_values);
 }
 
-void iree_hal_hip_queue_action_destroy(iree_hal_hip_queue_action_t* action) {
+static void iree_hal_hip_queue_action_destroy(
+    iree_hal_hip_queue_action_t* action) {
   IREE_TRACE_ZONE_BEGIN(z0);
   iree_hal_hip_pending_queue_actions_t* actions = action->owning_actions;
   iree_allocator_t host_allocator = actions->host_allocator;
@@ -647,7 +651,7 @@ static void iree_hal_hip_execution_device_signal_host_callback(
   // may run while we are still using the semaphore list, causing a crash.
   status = iree_hal_semaphore_list_signal(action->signal_semaphore_list);
   if (IREE_UNLIKELY(!iree_status_is_ok(status))) {
-    IREE_ASSERT(false && "can't signal semaphores");
+    IREE_ASSERT(false && "cannot signal semaphores in host callback");
     iree_hal_hip_post_error_to_worker_state(&actions->working_area,
                                             iree_status_code(status));
   }
@@ -919,6 +923,8 @@ iree_status_t iree_hal_hip_pending_queue_actions_issue(
   }
 
   if (IREE_UNLIKELY(!iree_status_is_ok(status))) {
+    iree_hal_hip_queue_action_list_destroy(ready_list.head);
+    iree_allocator_free(actions->host_allocator, entry);
     IREE_TRACE_ZONE_END(z0);
     return status;
   }

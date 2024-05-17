@@ -102,19 +102,6 @@ static void iree_hal_hip_semaphore_destroy(
   IREE_TRACE_ZONE_END(z0);
 }
 
-static iree_status_t iree_hal_hip_semaphore_query_locked(
-    iree_hal_semaphore_t* base_semaphore, uint64_t* out_value) {
-  iree_hal_hip_semaphore_t* semaphore =
-      iree_hal_hip_semaphore_cast(base_semaphore);
-  *out_value = semaphore->current_value;
-
-  iree_status_t status = iree_ok_status();
-  if (*out_value >= IREE_HAL_SEMAPHORE_FAILURE_VALUE) {
-    status = iree_status_clone(semaphore->failure_status);
-  }
-  return status;
-}
-
 static iree_status_t iree_hal_hip_semaphore_query(
     iree_hal_semaphore_t* base_semaphore, uint64_t* out_value) {
   iree_hal_hip_semaphore_t* semaphore =
@@ -123,8 +110,12 @@ static iree_status_t iree_hal_hip_semaphore_query(
 
   iree_slim_mutex_lock(&semaphore->mutex);
 
-  iree_status_t status =
-      iree_hal_hip_semaphore_query_locked(base_semaphore, out_value);
+  *out_value = semaphore->current_value;
+
+  iree_status_t status = iree_ok_status();
+  if (*out_value >= IREE_HAL_SEMAPHORE_FAILURE_VALUE) {
+    status = iree_status_clone(semaphore->failure_status);
+  }
 
   iree_slim_mutex_unlock(&semaphore->mutex);
 
@@ -264,8 +255,8 @@ bool iree_hal_hip_semaphore_acquire_event_host_wait(
   return *out_event != NULL;
 }
 
-// Check if the semaphore has to wait to reach `value`.
-// If it has to wait, then acquire a wait timepoint and return it.
+// Checks if the semaphore has to wait to reach `value`.
+// If it has to wait, then acquire a wait timepoint and returns it.
 // If we don't need to wait, then *out_timepoint is set to NULL.
 static iree_status_t iree_hal_hip_semaphore_try_wait_or_acquire_wait_timepoint(
     iree_hal_semaphore_t* base_semaphore, uint64_t value,
@@ -377,9 +368,7 @@ iree_status_t iree_hal_hip_semaphore_multi_wait(
       status = iree_hal_hip_semaphore_try_wait_or_acquire_wait_timepoint(
           semaphore_list.semaphores[i], semaphore_list.payload_values[i],
           timeout, &timepoint);
-      if (!iree_status_is_ok(status)) {
-        break;
-      }
+      if (!iree_status_is_ok(status)) break;
       if (!timepoint) {
         // We don't need to wait on a timepoint.
         // The wait condition is satisfied.
