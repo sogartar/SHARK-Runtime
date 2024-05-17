@@ -923,6 +923,7 @@ iree_status_t iree_hal_hip_pending_queue_actions_issue(
   }
 
   if (IREE_UNLIKELY(!iree_status_is_ok(status))) {
+    // Release all actions in the ready list to avoid leaking.
     iree_hal_hip_queue_action_list_destroy(ready_list.head);
     iree_allocator_free(actions->host_allocator, entry);
     IREE_TRACE_ZONE_END(z0);
