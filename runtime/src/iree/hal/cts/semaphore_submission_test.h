@@ -434,6 +434,9 @@ TEST_P(semaphore_submission_test, TwoBatchesWaitingOn1FormerBatchAmongst2) {
   iree_hal_semaphore_t* semaphore11 = CreateSemaphore();
   iree_hal_semaphore_t* semaphore21 = CreateSemaphore();
   iree_hal_semaphore_t* semaphore22 = CreateSemaphore();
+  fprintf(stderr, "semaphore11 = %p\n", semaphore11);
+  fprintf(stderr, "semaphore21 = %p\n", semaphore21);
+  fprintf(stderr, "semaphore22 = %p\n", semaphore22);
 
   // All semaphores start from value 0 and reach 1.
   uint64_t semaphore_signal_wait_value = 1;

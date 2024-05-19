@@ -144,6 +144,7 @@ static iree_status_t iree_hal_hip_semaphore_signal(
 
   semaphore->current_value = new_value;
 
+  fprintf(stderr, "iree_hal_hip_semaphore_signal %p\n", semaphore);
   iree_slim_mutex_unlock(&semaphore->mutex);
 
   // Notify timepoints - note that this must happen outside the lock.
@@ -256,7 +257,7 @@ bool iree_hal_hip_semaphore_acquire_event_host_wait(
 }
 
 // Checks if the semaphore has to wait to reach `value`.
-// If it has to wait, then acquire a wait timepoint and returns it.
+// If it has to wait, then acquires a wait timepoint and returns it.
 // If we don't need to wait, then *out_timepoint is set to NULL.
 static iree_status_t iree_hal_hip_semaphore_try_wait_or_acquire_wait_timepoint(
     iree_hal_semaphore_t* base_semaphore, uint64_t value,
