@@ -415,6 +415,12 @@ jobs:
         run: tar -xf "${INSTALL_DIR_ARCHIVE}"
       - name: "Building tests"
         run: |
+          ./build_tools/github_actions/docker_run.sh \
+            --env IREE_CPU_DISABLE \
+            --env IREE_VULKAN_DISABLE \
+            --env IREE_CUDA_DISABLE \
+            --env IREE_HIP_DISABLE \
+          ghcr.io/nod-ai/amdgpu_ubuntu_jammy_x86_64@sha256:c623e1c62a59c9eb756211fe7f4498c6cd909db7943670764ab11b7fd3929671 \
           ./build_tools/pkgci/build_tests_using_package.sh ${INSTALL_DIR}
       - name: "Running GPU tests"
         env:
@@ -427,6 +433,17 @@ jobs:
           IREE_CPU_DISABLE: 1
           IREE_HIP_DISABLE: 0
         run: |
+          ./build_tools/github_actions/docker_run.sh \
+            --device=/dev/kfd --device=/dev/dri --security-opt seccomp=unconfined \
+            --env IREE_CTEST_LABEL_REGEX \
+            --env IREE_NVIDIA_SM80_TESTS_DISABLE \
+            --env IREE_MULTI_DEVICE_TESTS_DISABLE \
+            --env IREE_AMD_RDNA3_TESTS_DISABLE \
+            --env IREE_NVIDIA_GPU_TESTS_DISABLE \
+            --env IREE_CUDA_DISABLE \
+            --env IREE_CPU_DISABLE \
+            --env IREE_HIP_DISABLE \
+          ghcr.io/nod-ai/amdgpu_ubuntu_jammy_x86_64@sha256:c623e1c62a59c9eb756211fe7f4498c6cd909db7943670764ab11b7fd3929671 \
           ./build_tools/cmake/ctest_all.sh ${BUILD_DIR}
 
   # TODO(#17370): re-enable when nodai-amdgpu-w7900-x86-64 runner is stable
