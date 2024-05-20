@@ -5,10 +5,8 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 import unittest
-import iree.compiler
 import argparse
 import sys
-import iree.runtime
 from iree.runtime.array_interop import DeviceArray
 import os
 from typing import List, Tuple
@@ -17,6 +15,18 @@ import tempfile
 import subprocess
 import test_utils
 import multiprocessing
+import importlib.util
+
+
+def iree_compiler_module_exists() -> bool:
+    spec = importlib.util.find_spec("iree.compiler")
+    return spec is not None
+
+
+if iree_compiler_module_exists():
+    import iree.compiler
+else:
+    print("iree.compiler module not found skipping tests.", file=sys.stderr)
 
 ArrayLike = object
 
@@ -148,6 +158,13 @@ def run_test(
     expected_outputs: List[List[ArrayLike]],
     mlir_input_type: iree.compiler.InputType | str = iree.compiler.InputType.AUTO,
 ):
+    if args.target_backend not in iree.compiler.query_available_targets():
+        print(
+            f'Compiler target backend "{args.target_backend}" not available. Skipping test.',
+            file=sys.stderr,
+        )
+        return
+
     with tempfile.TemporaryDirectory() as tmp_dir:
         module_filepath = os.path.join(tmp_dir, "module.vmfb")
         iree.compiler.tools.compile_str(
