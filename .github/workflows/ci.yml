@@ -402,6 +402,7 @@ jobs:
       IREE_VULKAN_DISABLE: 1
       IREE_CUDA_DISABLE: 1
       IREE_HIP_DISABLE: 0
+      PYTHONPATH: "${INSTALL_DIR}/python_packages"
       IREE_HIP_TEST_TARGET_CHIP: "gfx90a"
     runs-on: nodai-amdgpu-mi250-x86-64
     steps:
@@ -420,6 +421,7 @@ jobs:
             --env IREE_VULKAN_DISABLE \
             --env IREE_CUDA_DISABLE \
             --env IREE_HIP_DISABLE \
+            --env PYTHONPATH \
           ghcr.io/nod-ai/amdgpu_ubuntu_jammy_x86_64@sha256:c623e1c62a59c9eb756211fe7f4498c6cd909db7943670764ab11b7fd3929671 \
           ./build_tools/pkgci/build_tests_using_package.sh ${INSTALL_DIR}
       - name: "Running GPU tests"
