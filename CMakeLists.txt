@@ -854,7 +854,9 @@ else()
   endif()
 
   # Ensure that LLVM-based dependencies needed for testing are included.
-  add_dependencies(iree-test-deps FileCheck)
+  if(FileCheck)
+    add_dependencies(iree-test-deps FileCheck)
+  endif()
   if(IREE_LLD_TARGET)
     add_dependencies(iree-test-deps ${IREE_LLD_TARGET})
   endif()

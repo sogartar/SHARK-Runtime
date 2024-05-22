@@ -156,14 +156,17 @@ function(iree_py_test)
     "ARGS;LABELS;TIMEOUT"
     ${ARGN}
   )
+  unset(_PACKAGE_DIRS)
   # If we are not building the bindings then the Python environment must
   # provide required IREE modules.
   if(IREE_BUILD_PYTHON_BINDINGS)
-    set(_PACKAGE_DIRS
+    list(APPEND _PACKAGE_DIRS
       "${IREE_BINARY_DIR}/compiler/bindings/python"
       "${IREE_BINARY_DIR}/runtime/bindings/python"
     )
   endif()
+
+  list(APPEND _PACKAGE_DIRS "${IREE_BINARY_DIR}/tests/python")
 
   iree_local_py_test(
     NAME

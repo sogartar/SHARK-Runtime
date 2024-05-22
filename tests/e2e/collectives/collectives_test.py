@@ -15,18 +15,10 @@ import tempfile
 import subprocess
 import test_utils
 import multiprocessing
-import importlib.util
+import iree.testing
 
-
-def iree_compiler_module_exists() -> bool:
-    spec = importlib.util.find_spec("iree.compiler")
-    return spec is not None
-
-
-if iree_compiler_module_exists():
+if iree.testing.has_requirements(compiler=True, runtime=True):
     import iree.compiler
-else:
-    print("iree.compiler module not found skipping tests.", file=sys.stderr)
 
 ArrayLike = object
 
@@ -158,13 +150,6 @@ def run_test(
     expected_outputs: List[List[ArrayLike]],
     mlir_input_type: iree.compiler.InputType | str = iree.compiler.InputType.AUTO,
 ):
-    if args.target_backend not in iree.compiler.query_available_targets():
-        print(
-            f'Compiler target backend "{args.target_backend}" not available. Skipping test.',
-            file=sys.stderr,
-        )
-        return
-
     with tempfile.TemporaryDirectory() as tmp_dir:
         module_filepath = os.path.join(tmp_dir, "module.vmfb")
         iree.compiler.tools.compile_str(
@@ -195,11 +180,16 @@ class TestCase(unittest.TestCase):
     shard_count: int = None
 
     def setUp(self):
-        if not has_needed_device_count(args.driver, self.shard_count):
+        if not iree.testing.has_requirements(
+            compiler=True,
+            runtime=True,
+            compiler_target_backends=[args.target_backend],
+            device_count={args.driver: self.shard_count},
+        ):
             raise unittest.SkipTest(
                 (
                     f'Skipping tests for driver "{args.driver}". '
-                    "Could not find needed number of devices."
+                    "Requirements not satisfied."
                 )
             )
 
