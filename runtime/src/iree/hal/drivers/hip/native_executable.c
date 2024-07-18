@@ -9,6 +9,7 @@
 #include <stddef.h>
 
 #include "iree/base/api.h"
+#include "iree/base/status.h"
 #include "iree/hal/drivers/hip/dynamic_symbols.h"
 #include "iree/hal/drivers/hip/status_util.h"
 
@@ -118,21 +119,19 @@ static iree_status_t iree_hal_hip_native_executable_flatbuffer_verify(
   return iree_ok_status();
 }
 
-iree_status_t iree_hal_hip_native_executable_create(
+static inline iree_status_t iree_hal_hip_native_executable_create_internal(
     const iree_hal_hip_dynamic_symbols_t* symbols, hipDevice_t device,
     const iree_hal_executable_params_t* executable_params,
     iree_allocator_t host_allocator, iree_hal_executable_t** out_executable) {
   IREE_ASSERT_ARGUMENT(symbols);
   IREE_ASSERT_ARGUMENT(executable_params);
   IREE_ASSERT_ARGUMENT(out_executable);
-  IREE_TRACE_ZONE_BEGIN(z0);
 
   *out_executable = NULL;
   iree_hal_hip_native_executable_t* executable = NULL;
 
-  IREE_RETURN_AND_END_ZONE_IF_ERROR(
-      z0, iree_hal_hip_native_executable_flatbuffer_verify(
-              executable_params->executable_data));
+  IREE_RETURN_IF_ERROR(iree_hal_hip_native_executable_flatbuffer_verify(
+      executable_params->executable_data));
 
   iree_hal_rocm_ExecutableDef_table_t executable_def =
       iree_hal_rocm_ExecutableDef_as_root(
@@ -166,8 +165,7 @@ iree_status_t iree_hal_hip_native_executable_create(
       sizeof(*executable) +
       entry_point_count * sizeof(executable->entry_points[0]) +
       total_entry_point_name_chars;
-  IREE_RETURN_AND_END_ZONE_IF_ERROR(
-      z0,
+  IREE_RETURN_IF_ERROR(
       iree_allocator_malloc(host_allocator, total_size, (void**)&executable));
   IREE_TRACE(
       char* string_table_buffer =
@@ -285,6 +283,30 @@ iree_status_t iree_hal_hip_native_executable_create(
     iree_hal_executable_destroy((iree_hal_executable_t*)executable);
   }
 
+  return status;
+}
+
+iree_status_t iree_hal_hip_native_executable_create(
+    const iree_hal_hip_dynamic_symbols_t* symbols, hipDevice_t device,
+    const iree_hal_executable_params_t* executable_params,
+    iree_allocator_t host_allocator, iree_hal_executable_t** out_executable) {
+  IREE_TRACE_ZONE_BEGIN(z0);
+  hipDevice_t device_to_restore;
+  IREE_HIP_RETURN_AND_END_ZONE_IF_ERROR(
+      z0, symbols, hipGetDevice(&device_to_restore), "hipGetDevice");
+  iree_status_t status =
+      IREE_HIP_RESULT_TO_STATUS(symbols, hipSetDevice(device), "hipSetDevice");
+  if (!iree_status_is_ok(status)) {
+    goto at_exit;
+  }
+  status = iree_hal_hip_native_executable_create_internal(
+      symbols, device, executable_params, host_allocator, out_executable);
+
+  iree_status_t restore_device_status;
+at_exit:
+  restore_device_status = IREE_HIP_RESULT_TO_STATUS(
+      symbols, hipSetDevice(device_to_restore), "hipSetDevice");
+  status = iree_status_join(status, restore_device_status);
   IREE_TRACE_ZONE_END(z0);
   return status;
 }

@@ -373,11 +373,26 @@ static iree_status_t iree_hal_hip_driver_create_device_by_id(
 
   iree_string_view_t device_name = iree_make_cstring_view("hip");
 
+  hipDevice_t device_to_restore;
+  IREE_HIP_RETURN_AND_END_ZONE_IF_ERROR(z0, &driver->hip_symbols,
+                                        hipGetDevice(&device_to_restore),
+                                        "hipGetDevice");
+  iree_status_t status = IREE_HIP_RESULT_TO_STATUS(
+      &driver->hip_symbols, hipSetDevice(device), "hipSetDevice");
+  if (!iree_status_is_ok(status)) {
+    goto at_exit;
+  }
+
   // Attempt to create the device now.
-  iree_status_t status = iree_hal_hip_device_create(
+  status = iree_hal_hip_device_create(
       base_driver, device_name, &driver->device_params, &driver->hip_symbols,
       &driver->nccl_symbols, device, host_allocator, out_device);
 
+  iree_status_t restore_device_status;
+at_exit:
+  restore_device_status = IREE_HIP_RESULT_TO_STATUS(
+      &driver->hip_symbols, hipSetDevice(device_to_restore), "hipSetDevice");
+  status = iree_status_join(status, restore_device_status);
   IREE_TRACE_ZONE_END(z0);
   return status;
 }

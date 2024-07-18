@@ -9,9 +9,11 @@
 #include <stddef.h>
 
 #include "iree/base/api.h"
+#include "iree/base/status.h"
 #include "iree/base/tracing.h"
 #include "iree/hal/drivers/hip/dynamic_symbols.h"
 #include "iree/hal/drivers/hip/hip_buffer.h"
+#include "iree/hal/drivers/hip/hip_headers.h"
 #include "iree/hal/drivers/hip/status_util.h"
 
 #if IREE_TRACING_FEATURES & IREE_TRACING_FEATURE_ALLOCATION_TRACKING
@@ -344,11 +346,22 @@ static iree_status_t iree_hal_hip_allocator_allocate_buffer(
   }
 
   iree_status_t status = iree_ok_status();
+
   iree_hal_hip_buffer_type_t buffer_type = IREE_HAL_HIP_BUFFER_TYPE_DEVICE;
   void* host_ptr = NULL;
   hipDeviceptr_t device_ptr = NULL;
   IREE_TRACE_ZONE_BEGIN_NAMED(z0, "iree_hal_hip_buffer_allocate");
   IREE_TRACE_ZONE_APPEND_VALUE_I64(z0, allocation_size);
+
+  hipDevice_t device_to_restore = -1;
+  IREE_HIP_RETURN_AND_END_ZONE_IF_ERROR(
+      z0, allocator->symbols, hipGetDevice(&device_to_restore), "hipGetDevice");
+  status = IREE_HIP_RESULT_TO_STATUS(
+      allocator->symbols, hipSetDevice(allocator->device), "hipSetDevice");
+  if (!iree_status_is_ok(status)) {
+    goto at_exit;
+  }
+
   if (iree_all_bits_set(compat_params.type,
                         IREE_HAL_MEMORY_TYPE_DEVICE_LOCAL)) {
     // Device local case.
@@ -390,7 +403,6 @@ static iree_status_t iree_hal_hip_allocator_allocate_buffer(
           hipHostGetDevicePointer(&device_ptr, host_ptr, /*flags=*/0));
     }
   }
-  IREE_TRACE_ZONE_END(z0);
 
   iree_hal_buffer_t* buffer = NULL;
   if (iree_status_is_ok(status)) {
@@ -418,6 +430,13 @@ static iree_status_t iree_hal_hip_allocator_allocate_buffer(
       iree_hal_buffer_release(buffer);
     }
   }
+
+  iree_status_t restore_device_status;
+at_exit:
+  restore_device_status = IREE_HIP_RESULT_TO_STATUS(
+      allocator->symbols, hipSetDevice(device_to_restore), "hipSetDevice");
+  status = iree_status_join(status, restore_device_status);
+  IREE_TRACE_ZONE_END(z0);
   return status;
 }
 
@@ -426,6 +445,20 @@ static void iree_hal_hip_allocator_deallocate_buffer(
     iree_hal_buffer_t* IREE_RESTRICT base_buffer) {
   iree_hal_hip_allocator_t* allocator =
       iree_hal_hip_allocator_cast(base_allocator);
+
+  hipDevice_t device_to_restore;
+  if (!iree_status_is_ok(IREE_HIP_RESULT_TO_STATUS(
+          allocator->symbols, hipGetDevice(&device_to_restore),
+          "hipGetDevice"))) {
+    assert(false);
+    return;
+  }
+  iree_status_t status = IREE_HIP_RESULT_TO_STATUS(
+      allocator->symbols, hipSetDevice(allocator->device), "hipSetDevice");
+  if (!iree_status_is_ok(status)) {
+    assert(false);
+    goto at_exit;
+  }
 
   const iree_hal_hip_buffer_type_t buffer_type =
       iree_hal_hip_buffer_type(base_buffer);
@@ -451,6 +484,11 @@ static void iree_hal_hip_allocator_deallocate_buffer(
   }
 
   iree_hal_buffer_destroy(base_buffer);
+
+at_exit:
+  status = IREE_HIP_RESULT_TO_STATUS(
+      allocator->symbols, hipSetDevice(device_to_restore), "hipSetDevice");
+  assert(iree_status_is_ok(status));
 }
 
 static iree_status_t iree_hal_hip_allocator_import_buffer(
