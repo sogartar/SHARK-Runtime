@@ -219,6 +219,10 @@ bool iree_atomic_slist_flush(iree_atomic_slist_t* list,
     iree_atomic_slist_deinitialize(&list->impl);                               \
   }                                                                            \
                                                                                \
+  static inline type* name##_slist_head(name##_slist_t* list) {                \
+    return name##_slist_entry_to_ptr(list->impl.head);                                                    \
+  }                                                                            \
+                                                                               \
   static inline void name##_slist_push(name##_slist_t* list, type* entry) {    \
     iree_atomic_slist_push(&list->impl, name##_slist_entry_from_ptr(entry));   \
   }                                                                            \
