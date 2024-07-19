@@ -7,13 +7,17 @@
 #ifndef IREE_HAL_CTS_SEMAPHORE_SUBMISSION_TEST_H_
 #define IREE_HAL_CTS_SEMAPHORE_SUBMISSION_TEST_H_
 
+#include <gtest/gtest.h>
+
 #include <cstdint>
 #include <thread>
 
 #include "iree/base/api.h"
+#include "iree/base/status.h"
 #include "iree/hal/allocator.h"
 #include "iree/hal/api.h"
 #include "iree/hal/cts/cts_test_base.h"
+#include "iree/hal/device.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 
@@ -839,6 +843,63 @@ TEST_F(SemaphoreSubmissionTest, BatchWaitingOnSmallerValueBeforeSignaled) {
   iree_hal_semaphore_release(semaphore1);
   iree_hal_semaphore_release(semaphore2);
   iree_hal_command_buffer_release(command_buffer);
+}
+
+// Submit an batch and check that the wait semaphore fails when the signal
+// semaphore fails.
+TEST_F(SemaphoreSubmissionTest, PropagateFailSignal) {
+  // signal-wait relation:
+  //
+  //     semaphore1
+  //         ↓
+  //  command_buffer
+  //         ↓
+  //     semaphore2
+
+  iree_hal_command_buffer_t* command_buffer = CreateEmptyCommandBuffer();
+  iree_hal_semaphore_t* semaphore1 = CreateSemaphore();
+  iree_hal_semaphore_t* semaphore2 = CreateSemaphore();
+
+  // Submit the command buffer.
+  uint64_t semaphore1_wait_value = 1;
+  iree_hal_semaphore_list_t command_buffer_wait_list = {
+      /*count=*/1, &semaphore1, &semaphore1_wait_value};
+  uint64_t semaphore2_signal_value = 1;
+  iree_hal_semaphore_list_t command_buffer_signal_list = {
+      /*count=*/1, &semaphore2, &semaphore2_signal_value};
+  IREE_ASSERT_OK(iree_hal_device_queue_execute(
+      device_, IREE_HAL_QUEUE_AFFINITY_ANY,
+      /*wait_semaphore_list=*/command_buffer_wait_list,
+      /*signal_semaphore_list=*/command_buffer_signal_list, 1, &command_buffer,
+      /*binding_tables=*/NULL));
+
+  iree_status_t status =
+      iree_make_status(IREE_STATUS_CANCELLED, "PropagateFailSignal test.");
+  std::thread signal_thread([&]() {
+    iree_hal_semaphore_fail(semaphore1, iree_status_clone(status));
+  });
+
+  iree_status_t wait_status =
+      iree_hal_semaphore_wait(semaphore2, semaphore2_signal_value,
+                              iree_make_deadline(IREE_TIME_INFINITE_FUTURE));
+  EXPECT_EQ(iree_status_code(wait_status), IREE_STATUS_ABORTED);
+  uint64_t value = 1234;
+  iree_status_t query_status = iree_hal_semaphore_query(semaphore2, &value);
+  EXPECT_EQ(value, IREE_HAL_SEMAPHORE_FAILURE_VALUE);
+  CheckStatusEqual(status, query_status);
+
+  signal_thread.join();
+  iree_hal_semaphore_release(semaphore1);
+  iree_hal_semaphore_release(semaphore2);
+  iree_hal_command_buffer_release(command_buffer);
+  iree_status_ignore(status);
+  iree_status_ignore(wait_status);
+  iree_status_ignore(query_status);
+}
+
+// Submit an invalid dispatch and check that the wait semaphore fails.
+TEST_F(SemaphoreSubmissionTest, PropagateDispatchFailure) {
+  // TODO:
 }
 
 }  // namespace iree::hal::cts
