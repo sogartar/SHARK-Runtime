@@ -1275,6 +1275,10 @@ static void iree_hal_hip_worker_process_ready_list(
       }
     }
 
+    if (IREE_UNLIKELY(!iree_status_is_ok(status))) {
+      break;
+    }
+
     iree_allocator_free(actions->host_allocator, entry);
   }
 
