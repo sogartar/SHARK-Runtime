@@ -9,6 +9,8 @@
 
 #include "iree/compiler/Dialect/HAL/IR/HALDialect.h"
 #include "iree/compiler/Dialect/HAL/IR/HALOps.h"
+#include "iree/compiler/Dialect/HAL/IR/HALTypes.h"
+#include "iree/compiler/Dialect/HAL/Target/TargetDevice.h"
 #include "iree/compiler/Dialect/HAL/Transforms/Passes.h"
 #include "iree/compiler/Dialect/Util/IR/UtilDialect.h"
 #include "iree/compiler/Dialect/Util/IR/UtilOps.h"
@@ -60,9 +62,25 @@ makeDefaultDeviceAttrRef(Attribute defaultDeviceAttr) {
 }
 
 // Creates a named device global with the given attribute.
-static FailureOr<FlatSymbolRefAttr>
-createDeviceGlobal(Location loc, StringAttr name, Attribute targetAttr,
-                   OpBuilder &moduleBuilder) {
+static FailureOr<FlatSymbolRefAttr> createDeviceGlobal(
+    Location loc, StringAttr name, Attribute targetAttr,
+    DenseMap<StringRef, IREE::Util::GlobalOp> &existingDeviceGlobalsMap,
+    OpBuilder &moduleBuilder) {
+  // Don't create but return if there is already an existing global op with
+  // that name and value.
+  auto existingDeviceGlobalsMapIt = existingDeviceGlobalsMap.find(name);
+  if (existingDeviceGlobalsMapIt != existingDeviceGlobalsMap.end()) {
+    if (existingDeviceGlobalsMapIt->second.getInitialValueAttr() !=
+        targetAttr) {
+      return mlir::emitError(loc)
+             << "device \"" << name
+             << "\"already defined with unexpected value. Expected \""
+             << existingDeviceGlobalsMapIt->second.getInitialValueAttr()
+             << "\", but got \"" << targetAttr << "\"";
+    }
+    return FlatSymbolRefAttr::get(existingDeviceGlobalsMapIt->second);
+  }
+
   auto deviceType = moduleBuilder.getType<IREE::HAL::DeviceType>();
   auto globalOp = moduleBuilder.create<IREE::Util::GlobalOp>(
       loc, name, /*isMutable=*/false, deviceType);
@@ -98,18 +116,35 @@ createDeviceGlobal(Location loc, StringAttr name, Attribute targetAttr,
   return FlatSymbolRefAttr::get(globalOp);
 }
 
+static DenseMap<StringRef, IREE::Util::GlobalOp>
+getDeviceGlobalsMap(ModuleOp moduleOp) {
+  // Return the map
+  // device name -> global op
+  DenseMap<StringRef, IREE::Util::GlobalOp> res;
+  for (auto globalOp :
+       moduleOp.getBodyRegion().getOps<IREE::Util::GlobalOp>()) {
+    if (!isa<IREE::HAL::DeviceType>(globalOp.getType())) {
+      continue;
+    }
+    assert(!res.contains(globalOp.getSymName()) && "Duplicate device name");
+    res.insert({globalOp.getSymName(), globalOp});
+  }
+  return res;
+}
+
 // Creates one or more device globals based on the specified targets and returns
 // the "default" device (usually just the first one specified).
 static FailureOr<FlatSymbolRefAttr> createDeviceGlobals(mlir::ModuleOp moduleOp,
                                                         Attribute targetsAttr) {
   auto moduleBuilder = OpBuilder::atBlockBegin(moduleOp.getBody());
+  auto deviceGlobalsMap = getDeviceGlobalsMap(moduleOp);
 
   FlatSymbolRefAttr firstDeviceRef;
   if (auto dictAttr = dyn_cast<DictionaryAttr>(targetsAttr)) {
     for (auto namedTargetsAttr : dictAttr.getValue()) {
-      auto deviceRefOr =
-          createDeviceGlobal(moduleOp.getLoc(), namedTargetsAttr.getName(),
-                             namedTargetsAttr.getValue(), moduleBuilder);
+      auto deviceRefOr = createDeviceGlobal(
+          moduleOp.getLoc(), namedTargetsAttr.getName(),
+          namedTargetsAttr.getValue(), deviceGlobalsMap, moduleBuilder);
       if (failed(deviceRefOr)) {
         return failure();
       } else if (!firstDeviceRef) {
@@ -118,11 +153,11 @@ static FailureOr<FlatSymbolRefAttr> createDeviceGlobals(mlir::ModuleOp moduleOp,
     }
   } else if (auto arrayAttr = dyn_cast<ArrayAttr>(targetsAttr)) {
     for (auto [i, ordinalTargetsAttr] : llvm::enumerate(arrayAttr.getValue())) {
-      auto deviceRefOr =
-          createDeviceGlobal(moduleOp.getLoc(),
-                             moduleBuilder.getStringAttr(
-                                 StringRef("__device_") + std::to_string(i)),
-                             ordinalTargetsAttr, moduleBuilder);
+      auto deviceRefOr = createDeviceGlobal(
+          moduleOp.getLoc(),
+          moduleBuilder.getStringAttr(StringRef("__device_") +
+                                      std::to_string(i)),
+          ordinalTargetsAttr, deviceGlobalsMap, moduleBuilder);
       if (failed(deviceRefOr)) {
         return failure();
       } else if (!firstDeviceRef) {

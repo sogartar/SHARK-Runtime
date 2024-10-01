@@ -6,6 +6,7 @@
 
 #include "iree/compiler/ConstEval/Passes.h"
 #include "iree/compiler/ConstEval/Runtime.h"
+#include "iree/compiler/Dialect/HAL/IR/HALTypes.h"
 #include "iree/compiler/Dialect/HAL/Target/TargetOptions.h"
 #include "iree/compiler/Dialect/Util/Analysis/Constant/ConstExpr.h"
 #include "iree/compiler/Dialect/Util/Analysis/Constant/OpOracle.h"
@@ -13,6 +14,7 @@
 #include "iree/compiler/Pipelines/Pipelines.h"
 #include "iree/compiler/Utils/PassUtils.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Timer.h"
 #include "llvm/Support/raw_ostream.h"
@@ -498,12 +500,45 @@ public:
     return success();
   }
 
+  // In the destination module create devices with the same name as the ones in
+  // the source module, but all targeting the same |deviceTargetAttr|.
+  void createCorrespondingDeviceDefinitions(
+      ModuleOp srcModule, IREE::HAL::DeviceTargetAttr deviceTargetAttr) {
+    insertDeviceDefinitions(getDeviceDefinitions(srcModule), deviceTargetAttr);
+  }
+
 private:
   static ModuleOp createInnerModule(ModuleOp sourceModuleOp) {
     OpBuilder builder = OpBuilder::atBlockEnd(sourceModuleOp.getBody());
     auto m = builder.create<ModuleOp>(sourceModuleOp.getLoc());
     m->setAttr("iree.consteval", builder.getUnitAttr());
     return m;
+  }
+
+  // Return the symbols of devices defined in the module.
+  static SmallVector<IREE::Util::GlobalOp>
+  getDeviceDefinitions(ModuleOp module) {
+    SmallVector<IREE::Util::GlobalOp> res;
+    for (auto globalOp : module.getOps<IREE::Util::GlobalOp>()) {
+      if (!isa<IREE::HAL::DeviceType>(globalOp.getType())) {
+        continue;
+      }
+      res.push_back(globalOp);
+    }
+    return res;
+  }
+
+  // For each device definition insert a device definition with that name, but
+  // replace its value with deviceAttr.
+  void insertDeviceDefinitions(
+      const SmallVector<IREE::Util::GlobalOp> &deviceDefinitions,
+      IREE::HAL::DeviceTargetAttr deviceAttr) {
+    OpBuilder builder(targetModuleOp.getBodyRegion());
+    for (auto deviceDef : deviceDefinitions) {
+      builder.create<IREE::Util::GlobalOp>(
+          deviceDef->getLoc(), deviceDef.getSymName(), /*isMutable*/ false,
+          deviceAttr.getType(), deviceAttr);
+    }
   }
 
   LogicalResult transformToJitFunction(IREE::Util::FuncOp funcOp) {
@@ -831,6 +866,9 @@ public:
       programBuilder.getTargetModule()->erase();
       return;
     }
+
+    programBuilder.createCorrespondingDeviceDefinitions(outerModule,
+                                                        *targetAttr);
 
     std::optional<llvm::Timer> compileTimer;
     if (debugEnabled) {
