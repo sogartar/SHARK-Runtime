@@ -11,6 +11,7 @@
 #include <unordered_set>
 
 #include "./buffer_interop.h"
+#include "./hal.h"
 #include "./status_utils.h"
 #include "iree/base/api.h"
 
@@ -20,6 +21,7 @@
 #include "iree/modules/hal/module.h"
 #include "iree/tooling/modules/resolver.h"
 #include "iree/vm/api.h"
+#include "nanobind/nanobind.h"
 
 using namespace nanobind::literals;
 
@@ -456,6 +458,15 @@ std::optional<iree_vm_function_t> VmModule::LookupFunction(
   }
   CheckApiStatus(status, "Error looking up function");
   return f;
+}
+
+void VmModule::SetHalModuleDebugSink(
+    const py::ref<HalModuleDebugSink>& debug_sink) {
+  this->hal_module_debug_sink = debug_sink;
+}
+
+const py::ref<HalModuleDebugSink>& VmModule::GetHalModuleDebugSink() const {
+  return this->hal_module_debug_sink;
 }
 
 //------------------------------------------------------------------------------

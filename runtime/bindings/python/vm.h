@@ -7,6 +7,8 @@
 #ifndef IREE_BINDINGS_PYTHON_IREE_RT_VM_H_
 #define IREE_BINDINGS_PYTHON_IREE_RT_VM_H_
 
+#include <nanobind/intrusive/ref.h>
+
 #include <optional>
 
 #include "./binding.h"
@@ -17,6 +19,8 @@
 
 namespace iree {
 namespace python {
+
+class HalModuleDebugSink;
 
 class FunctionAbi;
 
@@ -153,6 +157,8 @@ class VmModule : public ApiRefCounted<VmModule, iree_vm_module_t> {
   }
 
   py::object get_stashed_flatbuffer_blob() { return stashed_flatbuffer_blob; }
+  void SetHalModuleDebugSink(const py::ref<HalModuleDebugSink>& debug_sink);
+  const py::ref<HalModuleDebugSink>& GetHalModuleDebugSink() const;
 
  private:
   // If the module was created from a FlatBuffer blob, we stash it here.
@@ -162,6 +168,10 @@ class VmModule : public ApiRefCounted<VmModule, iree_vm_module_t> {
   // vm module), we ensure that there are no dangling references when
   // that deallocator is called.
   py::object stashed_flatbuffer_blob = py::none();
+  // Retains a reference to the debug sink as long as the HAL module
+  // Python object lives. We use this to traverse cyclic references.
+  // Where the debug sink callbacks may reference this module.
+  py::ref<HalModuleDebugSink> hal_module_debug_sink;
 };
 
 //------------------------------------------------------------------------------
