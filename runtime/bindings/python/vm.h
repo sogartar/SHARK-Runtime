@@ -169,8 +169,8 @@ class VmModule : public ApiRefCounted<VmModule, iree_vm_module_t> {
   // that deallocator is called.
   py::object stashed_flatbuffer_blob = py::none();
   // Retains a reference to the debug sink as long as the HAL module
-  // Python object lives. This filed is only used for the HAL module.
-  // Other VM modules don't use it.
+  // Python object lives. We use this to traverse cyclic references.
+  // Where the debug sink callbacks may reference this module.
   py::ref<HalModuleDebugSink> hal_module_debug_sink;
 };
 
@@ -196,16 +196,6 @@ class VmContext : public ApiRefCounted<VmContext, iree_vm_context_t> {
   // Synchronously invokes the given function.
   void Invoke(iree_vm_function_t f, VmVariantList& inputs,
               VmVariantList& outputs);
-
-  void SetHalModuleDebugSink(const py::ref<HalModuleDebugSink>& debug_sink);
-  const py::ref<HalModuleDebugSink>& GetHalModuleDebugSink() const;
-
- private:
-  // Retains a reference to the HAL module debug sink as long as this VM
-  // context Python object lives. After registration of the HAL module in the
-  // VM context, we want the debug sink to outlive the HAL module Python object
-  // that may be destroyed while the module is still registered.
-  py::ref<HalModuleDebugSink> hal_module_debug_sink;
 };
 
 class VmInvocation : public ApiRefCounted<VmInvocation, iree_vm_invocation_t> {

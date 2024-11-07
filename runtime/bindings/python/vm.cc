@@ -21,6 +21,7 @@
 #include "iree/modules/hal/module.h"
 #include "iree/tooling/modules/resolver.h"
 #include "iree/vm/api.h"
+#include "nanobind/nanobind.h"
 
 using namespace nanobind::literals;
 
@@ -177,7 +178,6 @@ VmInstance VmInstance::Create() {
 VmContext VmContext::Create(VmInstance* instance,
                             std::optional<std::vector<VmModule*>>& modules) {
   IREE_TRACE_SCOPE_NAMED("VmContext::Create");
-  VmModule* hal_module = nullptr;
   iree_vm_context_t* context;
   if (!modules) {
     // Simple create with open allowed modules.
@@ -190,11 +190,7 @@ VmContext VmContext::Create(VmInstance* instance,
     std::vector<iree_vm_module_t*> module_handles;
     module_handles.resize(modules->size());
     for (size_t i = 0, e = module_handles.size(); i < e; ++i) {
-      VmModule* module = (*modules)[i];
-      module_handles[i] = module->raw_ptr();
-      if (module->GetHalModuleDebugSink().get()) {
-        hal_module = module;
-      }
+      module_handles[i] = (*modules)[i]->raw_ptr();
     }
     auto status = iree_vm_context_create_with_modules(
         instance->raw_ptr(), IREE_VM_CONTEXT_FLAG_NONE, module_handles.size(),
@@ -203,12 +199,7 @@ VmContext VmContext::Create(VmInstance* instance,
   }
 
   IREE_ASSERT(context);
-  VmContext vm_context = VmContext::StealFromRawPtr(context);
-
-  if (hal_module)
-    vm_context.SetHalModuleDebugSink(hal_module->GetHalModuleDebugSink());
-
-  return vm_context;
+  return VmContext::StealFromRawPtr(context);
 }
 
 void VmContext::RegisterModules(std::vector<VmModule*> modules) {
@@ -216,9 +207,6 @@ void VmContext::RegisterModules(std::vector<VmModule*> modules) {
   module_handles.resize(modules.size());
   for (size_t i = 0, e = module_handles.size(); i < e; ++i) {
     module_handles[i] = modules[i]->raw_ptr();
-    if (modules[i]->GetHalModuleDebugSink().get()) {
-      this->SetHalModuleDebugSink(modules[i]->GetHalModuleDebugSink());
-    }
   }
   auto status = iree_vm_context_register_modules(
       raw_ptr(), module_handles.size(), &module_handles[0]);
@@ -236,6 +224,45 @@ void VmContext::Invoke(iree_vm_function_t f, VmVariantList& inputs,
   }
   CheckApiStatus(status, "Error invoking function");
 }
+
+static int VmContextTpTraverse(PyObject* self, visitproc visit, void* arg) {
+  // Inform Python's garbage collector about the references we hold.
+
+  // Retrieve a pointer to the C++ instance associated with 'self'
+  // (never fails)
+  VmContext* vm_context = py::inst_ptr<VmContext>(self);
+
+  iree_vm_context_t* native_vm_context = vm_context->raw_ptr();
+  iree_host_size_t module_count =
+      iree_vm_context_module_count(native_vm_context);
+  for (iree_host_size_t i = 0; i < module_count; ++i) {
+    iree_vm_module_t* module = iree_vm_context_module_at(native_vm_context, i);
+    py::object vm_module_py_object =
+        py::cast(VmModule::BorrowFromRawPtr(module), py::rv_policy::move);
+    printf("VmContextTpTraverse vm_module_py_object.ptr() = %p\n",
+           vm_module_py_object.ptr());
+    // Inform the Python GC about the instance.
+    Py_VISIT(vm_module_py_object.ptr());
+  }
+
+  return 0;
+}
+
+// int VmContextTpClear(PyObject* self) {
+//   // Retrieve a pointer to the C++ instance associated with 'self'
+//   // (never fails)
+//   VmContext* vm_context = py::inst_ptr<VmContext>(self);
+
+//   iree_vm_context_t* native_vm_context = vm_context->raw_ptr();
+//   iree_host_size_t module_count =
+//   iree_vm_context_module_count(native_vm_context); for (iree_host_size_t i =
+//   0; i < module_count; ++i) {
+//     iree_vm_module_t* module = iree_vm_context_module_at(native_vm_context,
+//     i); VmModule vm_module = VmModule::BorrowFromRawPtr(module); vm_module.
+//   }
+
+//   return 0;
+// }
 
 //------------------------------------------------------------------------------
 // VmModule
@@ -494,6 +521,9 @@ static int VmModuleTpTraverse(PyObject* self, visitproc visit, void* arg) {
       py::find(vm_module->GetHalModuleDebugSink().get());
 
   // Inform the Python GC about the instance.
+  // One time we visit for our reference and once for the reference
+  // of user data passed to IREE.
+  Py_VISIT(hal_module_debug_sink.ptr());
   Py_VISIT(hal_module_debug_sink.ptr());
 
   return 0;
@@ -504,46 +534,6 @@ int VmModuleTpClear(PyObject* self) {
   // (never fails)
   VmModule* vm_module = py::inst_ptr<VmModule>(self);
   vm_module->SetHalModuleDebugSink(nullptr);
-
-  return 0;
-}
-
-//------------------------------------------------------------------------------
-// VmContext
-//------------------------------------------------------------------------------
-
-void VmContext::SetHalModuleDebugSink(
-    const py::ref<HalModuleDebugSink>& debug_sink) {
-  this->hal_module_debug_sink = debug_sink;
-}
-
-const py::ref<HalModuleDebugSink>& VmContext::GetHalModuleDebugSink() const {
-  return this->hal_module_debug_sink;
-}
-
-static int VmContextTpTraverse(PyObject* self, visitproc visit, void* arg) {
-  // Inform Python's garbage collector about the references we hold.
-
-  // Retrieve a pointer to the C++ instance associated with 'self'
-  // (never fails)
-  VmContext* vm_context = py::inst_ptr<VmContext>(self);
-
-  // If the debug sink has an associated CPython object, return it.
-  // If not, debug_sink.ptr() will equal NULL, which is also fine.
-  py::handle hal_module_debug_sink =
-      py::find(vm_context->GetHalModuleDebugSink().get());
-
-  // Inform the Python GC about the instance.
-  Py_VISIT(hal_module_debug_sink.ptr());
-
-  return 0;
-}
-
-int VmContextTpClear(PyObject* self) {
-  // Retrieve a pointer to the C++ instance associated with 'self'
-  // (never fails)
-  VmContext* vm_context = py::inst_ptr<VmContext>(self);
-  vm_context->SetHalModuleDebugSink(nullptr);
 
   return 0;
 }
@@ -1008,11 +998,11 @@ void SetupVmBindings(nanobind::module_ m) {
     new (self) VmInstance();
     *self = VmInstance::Create();
   });
-  PyType_Slot vm_context_slots[] = {
-      {Py_tp_traverse, (void*)VmContextTpTraverse},
-      {Py_tp_clear, (void*)VmContextTpClear},
-      {0, nullptr}};
-  py::class_<VmContext>(m, "VmContext", py::type_slots(vm_context_slots))
+  // PyType_Slot vm_context_slots[] = {
+  //     {Py_tp_traverse, (void*)VmContextTpTraverse},
+  //     //{Py_tp_clear, (void*)VmContextTpClear},
+  //     {0, nullptr}};
+  py::class_<VmContext>(m, "VmContext" /*, py::type_slots(vm_context_slots)*/)
       .def(
           "__init__",
           [](VmContext* self, VmInstance* instance,
@@ -1026,10 +1016,11 @@ void SetupVmBindings(nanobind::module_ m) {
       .def_prop_ro("context_id", &VmContext::context_id)
       .def("invoke", &VmContext::Invoke);
 
-  PyType_Slot vm_module_slots[] = {{Py_tp_traverse, (void*)VmModuleTpTraverse},
-                                   {Py_tp_clear, (void*)VmModuleTpClear},
-                                   {0, nullptr}};
-  py::class_<VmModule>(m, "VmModule", py::type_slots(vm_module_slots))
+  // PyType_Slot vm_module_slots[] = {{Py_tp_traverse,
+  // (void*)VmModuleTpTraverse},
+  //                                  {Py_tp_clear, (void*)VmModuleTpClear},
+  //                                  {0, nullptr}};
+  py::class_<VmModule>(m, "VmModule" /*, py::type_slots(vm_module_slots)*/)
       .def_static("resolve_module_dependency",
                   &VmModule::ResolveModuleDependency)
       .def_static("from_flatbuffer", &VmModule::FromBuffer, py::arg("instance"),

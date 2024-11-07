@@ -306,11 +306,16 @@ class HalModuleDebugSink : public py::intrusive_base {
  public:
   HalModuleDebugSink(
       HalModuleBufferViewTraceCallback buffer_view_trace_callback);
-  iree_hal_module_debug_sink_t AsIreeHalModuleHalModuleDebugSink() const;
+  ~HalModuleDebugSink() {
+    printf("HalModuleDebugSink::~HalModuleDebugSink()\n");
+  }
+  iree_hal_module_debug_sink_t AsIreeHalModuleDebugSink() const;
   HalModuleBufferViewTraceCallback& GetHalModuleBufferViewTraceCallback();
 
  private:
   HalModuleBufferViewTraceCallback buffer_view_trace_callback_;
+
+  static iree_status_t DestroyCallback(void* user_data);
 
   static iree_status_t IreeHalModuleBufferViewTrace(
       void* user_data, iree_string_view_t key,

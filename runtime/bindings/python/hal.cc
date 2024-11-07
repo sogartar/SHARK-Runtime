@@ -19,6 +19,7 @@
 #include "./numpy_interop.h"
 #include "./vm.h"
 #include "iree/base/internal/path.h"
+#include "iree/base/status.h"
 #include "iree/hal/api.h"
 #include "iree/hal/utils/allocators.h"
 #include "iree/modules/hal/module.h"
@@ -1107,8 +1108,7 @@ VmModule CreateHalModule(
   iree_hal_module_debug_sink_t iree_hal_module_debug_sink =
       iree_hal_module_debug_sink_stdio(stderr);
   if (debug_sink) {
-    iree_hal_module_debug_sink =
-        (*debug_sink)->AsIreeHalModuleHalModuleDebugSink();
+    iree_hal_module_debug_sink = (*debug_sink)->AsIreeHalModuleDebugSink();
   }
 
   CheckApiStatus(iree_hal_module_create(instance->raw_ptr(), device_count,
@@ -1119,9 +1119,12 @@ VmModule CreateHalModule(
   VmModule vm_module = VmModule::StealFromRawPtr(module);
   if (debug_sink) {
     // Retain a reference. We want the callback to be valid after
-    // the user has dropped its reference and not burden the user
-    // with lifetime management.
-    vm_module.SetHalModuleDebugSink(*debug_sink);
+    // the user has dropped its reference to the HAL module Python object and
+    // not burden the user with lifetime management.
+    // The counter will be decremented once the IREE runtime does not use the
+    // debug sink anymore.
+    (*debug_sink)->inc_ref();
+    // vm_module.SetHalModuleDebugSink(*debug_sink);
   }
   return vm_module;
 }
@@ -1130,11 +1133,14 @@ HalModuleDebugSink::HalModuleDebugSink(
     HalModuleBufferViewTraceCallback buffer_view_trace_callback)
     : buffer_view_trace_callback_(buffer_view_trace_callback) {}
 
-iree_hal_module_debug_sink_t
-HalModuleDebugSink::AsIreeHalModuleHalModuleDebugSink() const {
+iree_hal_module_debug_sink_t HalModuleDebugSink::AsIreeHalModuleDebugSink()
+    const {
   iree_hal_module_debug_sink_t res;
+  memset(&res, 0, sizeof(res));
   res.buffer_view_trace.fn = HalModuleDebugSink::IreeHalModuleBufferViewTrace;
   res.buffer_view_trace.user_data = const_cast<HalModuleDebugSink*>(this);
+  res.destroy.fn = HalModuleDebugSink::DestroyCallback;
+  res.destroy.user_data = const_cast<HalModuleDebugSink*>(this);
   return res;
 }
 
@@ -1153,6 +1159,13 @@ static std::vector<HalBufferView> CreateHalBufferViewVector(
                    return HalBufferView::BorrowFromRawPtr(buffer_view);
                  });
   return res;
+}
+
+iree_status_t HalModuleDebugSink::DestroyCallback(void* user_data) {
+  HalModuleDebugSink* debug_sink =
+      reinterpret_cast<HalModuleDebugSink*>(user_data);
+  debug_sink->dec_ref();
+  return iree_ok_status();
 }
 
 iree_status_t HalModuleDebugSink::IreeHalModuleBufferViewTrace(

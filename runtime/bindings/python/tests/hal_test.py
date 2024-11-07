@@ -786,12 +786,15 @@ class HalModuleDebugSinkTest(unittest.TestCase):
         object_holder.hold_vm_context(vm_context)
         assert not is_destructor_called
 
-        del object_holder
+        del hal_module
         gc.collect()
         assert not is_destructor_called
 
-        del hal_module
         del instance
+        gc.collect()
+        assert not is_destructor_called
+
+        del object_holder
         gc.collect()
         assert not is_destructor_called
 
