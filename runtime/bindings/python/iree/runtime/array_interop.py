@@ -286,27 +286,40 @@ def asdevicearray(
     )
 
 
+def _make_dtype_to_hal_element_type_map() -> tuple[tuple[np.dtype, HalElementType]]:
+    res = [
+        (np.float16, HalElementType.FLOAT_16),
+        (np.float32, HalElementType.FLOAT_32),
+        (np.float64, HalElementType.FLOAT_64),
+        (np.int32, HalElementType.SINT_32),
+        (np.int64, HalElementType.SINT_64),
+        (np.int16, HalElementType.SINT_16),
+        (np.int8, HalElementType.SINT_8),
+        (np.uint32, HalElementType.UINT_32),
+        (np.uint64, HalElementType.UINT_64),
+        (np.uint16, HalElementType.UINT_16),
+        (np.uint8, HalElementType.UINT_8),
+        (np.bool_, HalElementType.BOOL_8),
+        (np.complex64, HalElementType.COMPLEX_64),
+        (np.complex128, HalElementType.COMPLEX_128),
+    ]
+
+    try:
+        # ml_dtypes support is optional
+        import ml_dtypes
+
+        res.append((ml_dtypes.bfloat16, HalElementType.BFLOAT_16))
+    except ImportError:
+        pass
+
+    return tuple(res)
+
+
 # NOTE: Numpy dtypes are not hashable and exist in a hierarchy that should
 # be queried via isinstance checks. This should be done as a fallback but
 # this is a linear list for quick access to the most common. There may also
 # be a better way to do this.
-_DTYPE_TO_HAL_ELEMENT_TYPE = (
-    (np.float16, HalElementType.FLOAT_16),
-    (np.float32, HalElementType.FLOAT_32),
-    (np.float64, HalElementType.FLOAT_64),
-    (np.float16, HalElementType.FLOAT_16),
-    (np.int32, HalElementType.SINT_32),
-    (np.int64, HalElementType.SINT_64),
-    (np.int16, HalElementType.SINT_16),
-    (np.int8, HalElementType.SINT_8),
-    (np.uint32, HalElementType.UINT_32),
-    (np.uint64, HalElementType.UINT_64),
-    (np.uint16, HalElementType.UINT_16),
-    (np.uint8, HalElementType.UINT_8),
-    (np.bool_, HalElementType.BOOL_8),
-    (np.complex64, HalElementType.COMPLEX_64),
-    (np.complex128, HalElementType.COMPLEX_128),
-)
+_DTYPE_TO_HAL_ELEMENT_TYPE = _make_dtype_to_hal_element_type_map()
 
 
 def map_dtype_to_element_type(dtype) -> Optional[HalElementType]:

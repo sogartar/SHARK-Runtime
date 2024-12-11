@@ -639,4 +639,7 @@ setup(
     install_requires=[
         "numpy",
     ],
+    extras_require={
+        "ml_dtypes": ["ml_dtypes>=0.1"],
+    },
 )

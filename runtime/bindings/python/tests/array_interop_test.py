@@ -175,6 +175,16 @@ class DeviceHalTest(unittest.TestCase):
         self.assertEqual(repr(ary), "<IREE DeviceArray: shape=[3, 4], dtype=bool>")
         np.testing.assert_array_equal(ary.to_host(), init_ary)
 
+    def testBfloat16(self):
+        try:
+            import ml_dtypes
+        except ImportError:
+            pass
+        init_ary = np.array([1.1, 2.2, 3.3], dtype=ml_dtypes.bfloat16)
+        # init_ary = np.array([1.1, 2.2, 3.3], dtype=np.float32)
+        ary = iree.runtime.asdevicearray(self.device, init_ary)
+        np.testing.assert_array_equal(ary.to_host(), init_ary)
+
 
 if __name__ == "__main__":
     unittest.main()
