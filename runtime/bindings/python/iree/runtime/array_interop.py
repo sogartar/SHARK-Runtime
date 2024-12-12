@@ -9,6 +9,7 @@ from typing import Optional, Tuple
 import logging
 import numpy as np
 import numpy.lib.mixins
+import json
 
 from ._binding import (
     BufferUsage,
@@ -18,11 +19,14 @@ from ._binding import (
     MappedMemory,
     MemoryType,
     HalFence,
+    ParameterIndexEntry,
 )
 
 __all__ = [
     "asdevicearray",
     "DeviceArray",
+    "parameter_index_entry_as_numpy_flat_ndarray",
+    "parameter_index_entry_as_numpy_ndarray",
 ]
 
 _DEVICE_HANDLED_FUNCTIONS = {}
@@ -308,6 +312,28 @@ _DTYPE_TO_HAL_ELEMENT_TYPE = (
     (np.complex128, HalElementType.COMPLEX_128),
 )
 
+_DTYPE_TO_NAME = (
+    (np.float16, "float16"),
+    (np.float32, "float32"),
+    (np.float64, "float64"),
+    (np.float16, "float16"),
+    (np.int32, "int32"),
+    (np.int64, "int64"),
+    (np.int16, "int16"),
+    (np.int8, "int8"),
+    (np.uint32, "uint32"),
+    (np.uint64, "uint64"),
+    (np.uint16, "uint16"),
+    (np.uint8, "uint8"),
+    (np.bool_, "bool"),
+    (np.complex64, "complex64"),
+    (np.complex128, "complex128"),
+)
+
+_NAME_TO_DTYPE: dict[str, np.dtype] = {
+    name: np_dtype for np_dtype, name in _DTYPE_TO_NAME
+}
+
 
 def map_dtype_to_element_type(dtype) -> Optional[HalElementType]:
     for match_dtype, element_type in _DTYPE_TO_HAL_ELEMENT_TYPE:
@@ -315,3 +341,64 @@ def map_dtype_to_element_type(dtype) -> Optional[HalElementType]:
             return element_type
     else:
         return None
+
+
+def parameter_index_entry_as_numpy_flat_ndarray(
+    index_entry: ParameterIndexEntry,
+) -> np.ndarray:
+    """Accesses the contents as a uint8 flat tensor.
+
+    If it is a splat, then the tensor will be a view of the splat pattern.
+
+    Raises a ValueError on unsupported entries.
+    """
+    if index_entry.is_file:
+        wrapper = np.array(index_entry.file_view, copy=False)
+    elif index_entry.is_splat:
+        wrapper = np.array(index_entry.splat_pattern, copy=True)
+    else:
+        raise ValueError(f"Unsupported ParameterIndexEntry: {index_entry}")
+
+    return wrapper
+
+
+def parameter_index_entry_as_numpy_ndarray(
+    index_entry: ParameterIndexEntry,
+) -> np.ndarray:
+    """Returns a tensor viewed with appropriate shape/dtype from metadata.
+
+    Raises a ValueError if unsupported.
+    """
+
+    # Decode metadata.
+    metadata_prefix = "PYTORCH:"
+    metadata = index_entry.metadata.decode()
+    if not metadata.startswith(metadata_prefix):
+        raise ValueError(
+            f"No metadata for parameter entry {index_entry.key}: Cannot convert to tensor"
+        )
+    metadata = metadata[len(metadata_prefix) :]
+    d = json.loads(metadata)
+    try:
+        type_name = d["type"]
+        if d["type"] != "Tensor":
+            raise ValueError(
+                f"Metadata for parameter entry {index_entry.key} is not a Tensor ('{type_name}')"
+            )
+        dtype_name = d["dtype"]
+        shape = d["shape"]
+    except KeyError as e:
+        raise ValueError(f"Bad metadata for parameter entry {index_entry.key}") from e
+
+    # Unpack/validate.
+    try:
+        dtype = _NAME_TO_DTYPE[dtype_name]
+    except KeyError:
+        raise ValueError(f"Unknown dtype name '{dtype_name}'")
+    try:
+        shape = [int(d) for d in shape]
+    except ValueError as e:
+        raise ValueError(f"Illegal shape for parameter entry {index_entry.key}") from e
+
+    t = parameter_index_entry_as_numpy_flat_ndarray(index_entry)
+    return t.view(dtype=dtype).reshape(shape)
